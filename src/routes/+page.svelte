@@ -323,7 +323,7 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="min-h-screen bg-gradient-to-br from-gray-900 to-black text-white">
+<div class="min-h-screen bg-fixed bg-gradient-to-br from-gray-900 to-black text-white">
 	<ConversationsList />
 	
 	<div class="pl-64">
