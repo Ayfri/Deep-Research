@@ -1,0 +1,41 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Dependencies & Builds
+node_modules/
+.pnpm-store/
+dist/
+dist-ssr/
+.svelte-kit/
+.build/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Editor files
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local files
+*.local
+
+# Tests & Coverage
+coverage/
+.nyc_output/
+
+# SvelteKit specific
+.svelte-kit/
+*.svelte-dev

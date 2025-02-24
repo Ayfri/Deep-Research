@@ -1,0 +1,58 @@
+<script lang='ts'>
+	import { conversations } from '$lib/stores/conversations';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { MessageSquare, Trash2 } from 'lucide-svelte';
+
+	function formatDate(timestamp: number) {
+		return new Intl.DateTimeFormat('fr-FR', {
+			day: '2-digit',
+			month: '2-digit',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		}).format(new Date(timestamp));
+	}
+
+	function getFirstMessage(messages: any[]) {
+		const userMessage = messages.find(m => m.role === 'user');
+		if (!userMessage) return 'New conversation';
+		return userMessage.content.slice(0, 50) + (userMessage.content.length > 50 ? '...' : '');
+	}
+
+	function deleteConversation(id: string, event: MouseEvent) {
+		event.preventDefault();
+		event.stopPropagation();
+		conversations.deleteConversation(id);
+		
+		if (id === $page.url.searchParams.get('id')) {
+			const newId = conversations.createConversation('sonar-reasoning-pro');
+			goto(`/?id=${newId}`);
+		}
+	}
+</script>
+
+<div class="fixed left-0 top-0 h-screen w-64 bg-gray-900/50 backdrop-blur border-r border-gray-700/50 p-4 overflow-y-auto">
+	<div class="space-y-2">
+		{#each $conversations as conversation (conversation.id)}
+			<a
+				href="/?id={conversation.id}"
+				class="block p-2 rounded-lg hover:bg-white/5 transition-colors relative group {conversation.id === $page.url.searchParams.get('id') ? 'bg-white/10' : ''}"
+			>
+				<div class="flex items-center gap-2 mb-1">
+					<MessageSquare size={16} class="text-purple-400" />
+					<span class="text-sm text-gray-300">{formatDate(conversation.lastUpdated)}</span>
+					<button
+						class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity p-1"
+						on:click={e => deleteConversation(conversation.id, e)}
+						title="Delete conversation"
+					>
+						<Trash2 size={16} />
+					</button>
+				</div>
+				<p class="text-sm font-medium mb-1">{conversation.name || 'Nouvelle conversation'}</p>
+				<p class="text-xs text-gray-400 truncate">{getFirstMessage(conversation.messages)}</p>
+			</a>
+		{/each}
+	</div>
+</div> 
