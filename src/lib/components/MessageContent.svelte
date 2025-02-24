@@ -3,6 +3,7 @@
 	import { Copy, Edit, RotateCcw, Trash2 } from 'lucide-svelte';
 	import ThinkBlock from './ThinkBlock.svelte';
 	import MessageActions from './MessageActions.svelte';
+	import RawMarkdown from './RawMarkdown.svelte';
 
 	export let content: string;
 	export let onCopy: () => void;
@@ -64,7 +65,7 @@
 
 	{#each contentParts as part, i}
 		{#if i % 2 === 0}
-			{@html part}
+			<RawMarkdown content={part} />
 		{:else}
 			<ThinkBlock content={part} />
 		{/if}
@@ -78,57 +79,5 @@
 
 	.thinking::after {
 		@apply content-[''] absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-pulse;
-	}
-
-	:global(.message-content h1) {
-		@apply text-2xl font-bold mb-4;
-	}
-
-	:global(.message-content h2) {
-		@apply text-xl font-bold mb-3;
-	}
-
-	:global(.message-content h3) {
-		@apply text-lg font-bold mb-2;
-	}
-
-	:global(.message-content ul) {
-		@apply list-disc list-inside mb-4;
-	}
-
-	:global(.message-content ol) {
-		@apply list-decimal list-inside mb-4;
-	}
-
-	:global(.message-content code) {
-		@apply font-mono bg-gray-800 px-1 py-0.5 rounded;
-	}
-
-	:global(.message-content pre) {
-		@apply bg-gray-800 p-4 rounded-lg mb-4 overflow-x-auto;
-	}
-
-	:global(.message-content pre code) {
-		@apply bg-transparent p-0;
-	}
-
-	:global(.message-content blockquote) {
-		@apply border-l-4 border-gray-500 pl-4 italic mb-4;
-	}
-
-	:global(.message-content a) {
-		@apply text-purple-400 hover:text-purple-300;
-	}
-
-	:global(.message-content table) {
-		@apply w-full mb-4;
-	}
-
-	:global(.message-content th) {
-		@apply bg-gray-800 p-2 text-left;
-	}
-
-	:global(.message-content td) {
-		@apply border-t border-gray-700 p-2;
 	}
 </style> 

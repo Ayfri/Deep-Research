@@ -3,6 +3,7 @@
 	import { marked } from 'marked';
 	import { CheckCircle2, Circle, ChevronDown, Link } from 'lucide-svelte';
 	import ThinkBlock from './ThinkBlock.svelte';
+	import RawMarkdown from './RawMarkdown.svelte';
 	import { onDestroy } from 'svelte';
 
 	export let steps: ResearchStep[] = [];
@@ -145,7 +146,7 @@
 							{#if step.answer}
 								{#each formattedAnswers[i].split(/<svelte-think>(.*?)<\/svelte-think>/s) as part, j}
 									{#if j % 2 === 0}
-										{@html part}
+										<RawMarkdown content={part} />
 									{:else}
 										<ThinkBlock content={part} />
 									{/if}
@@ -180,57 +181,3 @@
 		{/each}
 	</div>
 </div>
-
-<style>
-	:global(.text-sm.text-gray-300 h1) {
-		@apply text-2xl font-bold mb-4;
-	}
-
-	:global(.text-sm.text-gray-300 h2) {
-		@apply text-xl font-bold mb-3;
-	}
-
-	:global(.text-sm.text-gray-300 h3) {
-		@apply text-lg font-bold mb-2;
-	}
-
-	:global(.text-sm.text-gray-300 ul) {
-		@apply list-disc list-inside mb-4;
-	}
-
-	:global(.text-sm.text-gray-300 ol) {
-		@apply list-decimal list-inside mb-4;
-	}
-
-	:global(.text-sm.text-gray-300 code) {
-		@apply font-mono bg-gray-800 px-1 py-0.5 rounded;
-	}
-
-	:global(.text-sm.text-gray-300 pre) {
-		@apply bg-gray-800 p-4 rounded-lg mb-4 overflow-x-auto;
-	}
-
-	:global(.text-sm.text-gray-300 pre code) {
-		@apply bg-transparent p-0;
-	}
-
-	:global(.text-sm.text-gray-300 blockquote) {
-		@apply border-l-4 border-gray-500 pl-4 italic mb-4;
-	}
-
-	:global(.text-sm.text-gray-300 a) {
-		@apply text-purple-400 hover:text-purple-300;
-	}
-
-	:global(.text-sm.text-gray-300 table) {
-		@apply w-full mb-4;
-	}
-
-	:global(.text-sm.text-gray-300 th) {
-		@apply bg-gray-800 p-2 text-left;
-	}
-
-	:global(.text-sm.text-gray-300 td) {
-		@apply border-t border-gray-700 p-2;
-	}
-</style> 
