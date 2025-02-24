@@ -15,8 +15,10 @@ export interface ChatMessage {
 export interface ResearchStep {
 	answer: string;
 	completed: boolean;
+	duration: number | null;
 	links: string[];
 	question: string;
+	startTime: number | null;
 }
 
 export interface DeepResearchUpdate {

@@ -3,11 +3,42 @@
 	import { marked } from 'marked';
 	import { CheckCircle2, Circle, ChevronDown, Link } from 'lucide-svelte';
 	import ThinkBlock from './ThinkBlock.svelte';
+	import { onDestroy } from 'svelte';
 
 	export let steps: ResearchStep[] = [];
 	export let totalSteps: number | null = null;
 
 	let expandedSteps = new Set<number>();
+	let timers: number[] = [];
+
+	// Update timers every 100ms for active steps
+	let interval: number | null = null;
+	$: if (steps.some(step => !step.completed && step.startTime !== null)) {
+		if (!interval) {
+			interval = setInterval(() => {
+				timers = steps.map(step => {
+					if (!step.completed && step.startTime !== null) {
+						return (Date.now() - step.startTime) / 1000;
+					}
+					return step.duration || 0;
+				});
+			}, 100);
+		}
+	} else if (interval) {
+		clearInterval(interval);
+		interval = null;
+	}
+
+	// Cleanup on component destroy
+	onDestroy(() => {
+		if (interval) {
+			clearInterval(interval);
+		}
+	});
+
+	function formatTime(seconds: number): string {
+		return seconds.toFixed(1);
+	}
 
 	function processThinkTags(text: string): string {
 		const thinkMatch = text.match(/<think>([\s\S]*?)(?:<\/think>|$)/);
@@ -90,13 +121,20 @@
 						class="w-full flex items-center justify-between gap-2 font-medium text-purple-300 hover:text-purple-200 transition-colors text-left"
 						on:click={() => toggleStep(i)}
 					>
-						<h3>
-							{#if step.question}
-								{step.question}
-							{:else}
-								<div class="h-6 w-48 bg-purple-400/20 animate-pulse rounded" />
+						<div class="flex items-center gap-2 flex-1">
+							<h3>
+								{#if step.question}
+									{step.question}
+								{:else}
+									<div class="h-6 w-48 bg-purple-400/20 animate-pulse rounded" />
+								{/if}
+							</h3>
+							{#if step.completed}
+								<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
+							{:else if step.startTime !== null}
+								<span class="text-sm text-gray-400">{formatTime(timers[i] || 0)}s</span>
 							{/if}
-						</h3>
+						</div>
 						<ChevronDown
 							size={16}
 							class="transition-transform {expandedSteps.has(i) ? 'rotate-180' : ''}"

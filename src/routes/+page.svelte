@@ -203,12 +203,15 @@
 									question: '',
 									answer: '',
 									completed: false,
-									links: []
+									links: [],
+									startTime: null,
+									duration: null
 								}));
 								hasUpdate = true;
 							} else if (data.type === 'processing') {
 								if (assistantMessage.researchSteps?.[data.step - 1]) {
 									assistantMessage.researchSteps[data.step - 1].question = data.question;
+									assistantMessage.researchSteps[data.step - 1].startTime = Date.now();
 									hasUpdate = true;
 								}
 							} else if (data.type === 'answer') {
@@ -216,6 +219,7 @@
 									assistantMessage.researchSteps[data.step - 1].answer = data.answer;
 									assistantMessage.researchSteps[data.step - 1].completed = true;
 									assistantMessage.researchSteps[data.step - 1].links = data.links || [];
+									assistantMessage.researchSteps[data.step - 1].duration = (Date.now() - (assistantMessage.researchSteps[data.step - 1].startTime || Date.now())) / 1000;
 									hasUpdate = true;
 								}
 							} else if (data.type === 'summary') {
