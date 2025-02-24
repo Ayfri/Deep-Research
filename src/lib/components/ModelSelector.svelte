@@ -31,7 +31,7 @@
 		{#if $model}
 			<span class="capitalize">{$model.replaceAll('-', ' ')}</span>
 		{:else}
-			<span>Sélectionner un modèle</span>
+			<span>Select a model</span>
 		{/if}
 		<ChevronDown size={16} class="transition-transform {isOpen ? 'rotate-180' : ''}" />
 	</button>
@@ -56,4 +56,3 @@
 		</div>
 	{/if}
 </div>
-

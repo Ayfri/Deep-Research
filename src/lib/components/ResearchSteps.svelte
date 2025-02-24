@@ -45,7 +45,7 @@
 							messageContent += data.choices[0].delta.content;
 						}
 					} catch (e) {
-						// Ignorer les erreurs de parsing JSON
+						// Ignore JSON parsing errors
 					}
 				}
 				return processThinkTags(messageContent);
@@ -67,7 +67,7 @@
 					style="width: {(steps.filter(s => s.completed).length / totalSteps) * 100}%"
 				/>
 			</div>
-			<span>{steps.filter(s => s.completed).length}/{totalSteps} étapes</span>
+			<span>{steps.filter(s => s.completed).length}/{totalSteps} steps</span>
 		</div>
 	{/if}
 
@@ -132,7 +132,7 @@
 									<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
 									<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.2s" />
 									<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.4s" />
-									<span class="ml-2">Recherche en cours...</span>
+									<span class="ml-2">Research in progress...</span>
 								</div>
 							{/if}
 						</div>
