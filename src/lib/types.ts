@@ -1,31 +1,31 @@
 export interface Model {
-  id: string;
-  name: string;
-  tokens: number;
-  thinking: boolean;
+	id: string;
+	name: string;
+	thinking: boolean;
+	tokens: number;
 }
 
 export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  links?: string[];
-  researchSteps?: ResearchStep[];
+	content: string;
+	links?: string[];
+	researchSteps?: ResearchStep[];
+	role: 'user' | 'assistant';
 }
 
 export interface ResearchStep {
-  question: string;
-  answer: string;
-  completed: boolean;
-  links: string[];
+	answer: string;
+	completed: boolean;
+	links: string[];
+	question: string;
 }
 
 export interface DeepResearchUpdate {
-  type: 'steps' | 'processing' | 'answer' | 'summary' | 'error';
-  step?: number;
-  steps?: number;
-  question?: string;
-  answer?: string;
-  content?: string;
-  message?: string;
-  links?: string[];
+	answer?: string;
+	content?: string;
+	links?: string[];
+	message?: string;
+	question?: string;
+	step?: number;
+	steps?: number;
+	type: 'steps' | 'processing' | 'answer' | 'summary' | 'error';
 }
