@@ -6,7 +6,6 @@
 	let isOpen = false;
 
 	const models: Model[] = [
-		{ id: 'deep-research', name: 'Deep Research', tokens: 128000, thinking: true },
 		{ id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro', tokens: 128000, thinking: true },
 		{ id: 'sonar-reasoning', name: 'Sonar Reasoning', tokens: 128000, thinking: true },
 		{ id: 'sonar-pro', name: 'Sonar Pro', tokens: 200000, thinking: false },

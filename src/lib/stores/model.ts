@@ -1,3 +1,4 @@
-import { writable } from 'svelte/store';
+import { persistent } from '$lib/stores/persistent';
 
-export const model = writable<string>('sonar-reasoning-pro');
+export const model = persistent('model', '');
+export const isDeepResearch = persistent('isDeepResearch', false);

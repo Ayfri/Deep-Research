@@ -1,12 +1,14 @@
 import { browser } from '$app/environment';
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import type { ChatMessage } from '$lib/types';
+import { isDeepResearch } from '$lib/stores/model';
 
 export interface Conversation {
 	id: string;
 	name?: string;
 	messages: ChatMessage[];
 	model: string;
+	isDeepResearch: boolean;
 	lastUpdated: number;
 }
 
@@ -38,6 +40,7 @@ function createConversationsStore() {
 				id,
 				messages: [],
 				model,
+				isDeepResearch: get(isDeepResearch),
 				lastUpdated: Date.now()
 			};
 
@@ -49,13 +52,13 @@ function createConversationsStore() {
 
 			return id;
 		},
-		updateConversation: (id: string, messages: ChatMessage[], model: string) => {
+		updateConversation: (id: string, messages: ChatMessage[], model: string, isDeepResearch: boolean) => {
 			if (!browser) return;
 			
 			update(conversations => {
 				const newConversations = conversations.map(conv =>
 					conv.id === id
-						? { ...conv, messages, model, lastUpdated: Date.now() }
+						? { ...conv, messages, model, isDeepResearch, lastUpdated: Date.now() }
 						: conv
 				);
 				saveToStorage(newConversations);

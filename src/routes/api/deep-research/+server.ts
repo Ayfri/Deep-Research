@@ -3,13 +3,13 @@ import type { RequestHandler } from './$types';
 import { OPENAI_API_KEY, PERPLEXITY_API_KEY } from '$env/static/private';
 
 const RESEARCH_PROMPT = `You are a research assistant. Your task is to break down the user's query into specific research questions that will help provide a comprehensive answer.
-Generate from 4 to 10 specific research questions that will help answer the user's query, the number of questions depends on the complexity of the query.
+Generate from 4 to 20 specific research questions that will help answer the user's query, the number of questions depends on the complexity of the query, avoid unnecessary questions.
 Each question should be focused and concise (1 sentence).
 Format your response as a JSON array of strings, each string being a research question.
 Example: ["What are the key components of X?", "How does Y impact Z?", ...]`;
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { message } = await request.json();
+	const { message, model } = await request.json();
 
 	if (!OPENAI_API_KEY || !PERPLEXITY_API_KEY) {
 		throw error(500, 'API keys not configured');
@@ -43,15 +43,25 @@ export const POST: RequestHandler = async ({ request }) => {
 				const researchData = await researchResponse.json();
 				const questions = JSON.parse(researchData.choices[0].message.content);
 
-				// Send the number of steps immediately
+				// Send the number of steps and all questions immediately
 				controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'steps', steps: questions.length })}\n\n`));
+				
+				// Send all questions immediately
+				for (let i = 0; i < questions.length; i++) {
+					controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+						type: 'processing', 
+						step: i + 1, 
+						question: questions[i],
+						startTime: Date.now()
+					})}\n\n`));
+				}
 
 				// Step 2: Process each research question
 				const answers: string[] = [];
 				const allLinks: string[][] = [];
 				for (let i = 0; i < questions.length; i++) {
 					const question = questions[i];
-					
+
 					// Send the current question being processed
 					controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'processing', step: i + 1, question })}\n\n`));
 
@@ -63,18 +73,18 @@ export const POST: RequestHandler = async ({ request }) => {
 							'Content-Type': 'application/json'
 						},
 						body: JSON.stringify({
-							model: 'sonar-reasoning-pro',
-                            messages: [{
-                                role: 'user', content: `
-                                You are a research assistant. Your task is to answer the user's query based on the research findings.
-                                Original question: ${message}
+							model: model || 'sonar-reasoning-pro',
+							messages: [{
+								role: 'user', content: `
+You are a research assistant. Your task is to answer the user's query based on the research findings.
+Original question: ${message}
 
-                                Previous research findings with answers:
-                                ${questions.slice(0, i).map((q: string, index: number) => `${q}\nAnswer: ${answers[index]}`).join("\n")}
+Previous research findings with answers:
+${questions.slice(0, i).map((q: string, index: number) => `${q}\nAnswer: ${answers[index]}`).join("\n")}
 
-                                Current research finding, reply to this question:
-                                ${question}
-                                ` }],
+Current research finding, reply to this question:
+${question}
+								`.trim() }],
 							stream: false
 						})
 					});
@@ -111,14 +121,14 @@ Original question: ${message}
 
 Research findings:
 ${questions
-    .map(
-        (q: string, i: number) =>
+	.map(
+		(q: string, i: number) =>
 `Question ${i + 1}: ${q}
 Answer: ${answers[i]}
 References: ${allLinks[i].join(", ")}
 `.trim()
-    )
-        .join("\n")}
+	)
+		.join("\n")}
 `.trim(),
 							},
 						],

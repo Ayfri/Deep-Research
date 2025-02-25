@@ -17,8 +17,10 @@
 	$: if (steps.some(step => !step.completed && step.startTime !== null)) {
 		if (!interval) {
 			interval = setInterval(() => {
-				timers = steps.map(step => {
-					if (!step.completed && step.startTime !== null) {
+				timers = steps.map((step, index) => {
+					// Only start timer if previous step is completed or it's the first step
+					const previousStepCompleted = index === 0 || steps[index - 1]?.completed;
+					if (!step.completed && step.startTime !== null && previousStepCompleted) {
 						return (Date.now() - step.startTime) / 1000;
 					}
 					return step.duration || 0;
@@ -119,8 +121,12 @@
 				</div>
 				<div class="space-y-2">
 					<button
-						class="w-full flex items-center justify-between gap-2 font-medium text-purple-300 hover:text-purple-200 transition-colors text-left"
-						on:click={() => toggleStep(i)}
+						class="w-full flex items-center justify-between gap-2 font-medium text-purple-300 hover:text-purple-200 transition-colors text-left {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-50 cursor-not-allowed' : ''}"
+						on:click={() => {
+							if (step.question && (step.startTime || step.completed)) {
+								toggleStep(i);
+							}
+						}}
 					>
 						<div class="flex items-center gap-2 flex-1">
 							<h3>
@@ -132,13 +138,13 @@
 							</h3>
 							{#if step.completed}
 								<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
-							{:else if step.startTime !== null}
+							{:else if step.startTime !== null && (i === 0 || steps[i - 1]?.completed)}
 								<span class="text-sm text-gray-400">{formatTime(timers[i] || 0)}s</span>
 							{/if}
 						</div>
 						<ChevronDown
 							size={16}
-							class="transition-transform {expandedSteps.has(i) ? 'rotate-180' : ''}"
+							class="transition-transform {expandedSteps.has(i) ? 'rotate-180' : ''} {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-0' : ''}"
 						/>
 					</button>
 					{#if expandedSteps.has(i)}

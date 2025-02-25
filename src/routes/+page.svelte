@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SendHorizontal, Plus } from 'lucide-svelte';
+	import { SendHorizontal, Plus, ScanSearch } from 'lucide-svelte';
 	import type { Model, ChatMessage } from '$lib/types';
 	import type { PageData } from './$types';
 	import { conversations } from '$lib/stores/conversations';
@@ -10,7 +10,7 @@
 	import Links from '$lib/components/Links.svelte';
 	import ConversationsList from '$lib/components/ConversationsList.svelte';
 	import ResearchSteps from '$lib/components/ResearchSteps.svelte';
-	import { model } from '$lib/stores/model';
+	import { model, isDeepResearch } from '$lib/stores/model';
 	export let data: PageData;
 
 	let message = '';
@@ -65,7 +65,7 @@
 		}
 
 		// Update the conversation in the store
-		conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model);
+		conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model, $isDeepResearch);
 	}
 
 	function startEditing(index: number, content: string) {
@@ -98,7 +98,7 @@
 			editingContent = '';
 
 			// Update the conversation in the store
-			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model);
+			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model, $isDeepResearch);
 			return;
 		}
 
@@ -141,14 +141,14 @@
 			const userChatMessage: ChatMessage = { role: 'user' as const, content: messageToSend };
 			const newChatHistory = [...chatHistory, userChatMessage];
 			chatHistory = newChatHistory;
-			conversations.updateConversation(conversationId, newChatHistory, $model);
+			conversations.updateConversation(conversationId, newChatHistory, $model, $isDeepResearch);
 
 			// Generate name if this is the first message
 			if (newChatHistory.length === 1) {
 				generateConversationName(newChatHistory);
 			}
 			
-			const endpoint = $model === 'deep-research' ? '/api/deep-research' : '/api/chat';
+			const endpoint = $isDeepResearch ? '/api/deep-research' : '/api/chat';
 			const response = await fetch(endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -170,7 +170,7 @@
 				role: 'assistant' as const,
 				content: '',
 				links: [],
-				researchSteps: $model === 'deep-research' ? [] : undefined
+				researchSteps: $isDeepResearch ? [] : undefined
 			};
 			const newChatHistoryWithAssistant = [...newChatHistory, assistantMessage];
 			chatHistory = newChatHistoryWithAssistant;
@@ -196,7 +196,7 @@
 
 					try {
 						const data = JSON.parse(trimmedLine.slice(5));
-						if ($model === 'deep-research') {
+						if ($isDeepResearch) {
 							if (data.type === 'steps') {
 								totalSteps = data.steps;
 								assistantMessage.researchSteps = Array(data.steps).fill(null).map(() => ({
@@ -249,7 +249,7 @@
 					// Update the conversation in the store every 500ms to avoid too frequent updates
 					const now = Date.now();
 					if (now - lastUpdate > 500) {
-						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model);
+						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model, $isDeepResearch);
 						lastUpdate = now;
 					}
 				}
@@ -259,7 +259,7 @@
 				try {
 					const data = JSON.parse(buffer.trim().slice(5));
 					let hasUpdate = false;
-					if ($model === 'deep-research') {
+					if ($isDeepResearch) {
 						if (data.type === 'summary') {
 							assistantMessage.content = data.content;
 							hasUpdate = true;
@@ -276,7 +276,7 @@
 					}
 					if (hasUpdate) {
 						chatHistory = newChatHistoryWithAssistant;
-						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model);
+						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model, $isDeepResearch);
 					}
 				} catch (e) {
 					console.error('Error parsing final buffer:', e);
@@ -289,7 +289,7 @@
 			chatHistory = chatHistory.slice(0, -1);
 			
 			if (conversationId) {
-				conversations.updateConversation(conversationId, chatHistory, $model);
+				conversations.updateConversation(conversationId, chatHistory, $model, $isDeepResearch);
 			}
 		} finally {
 			isLoading = false;
@@ -311,12 +311,13 @@
 	$: {
 		if (data.conversation) {
 			chatHistory = data.conversation.messages;
+			$isDeepResearch = data.conversation.isDeepResearch;
 		}
 	}
 
 	$: {
-		if (data.conversation && $model !== data.conversation.model) {
-			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model);
+		if (data.conversation && ($model !== data.conversation.model || $isDeepResearch !== data.conversation.isDeepResearch)) {
+			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model, $isDeepResearch);
 		}
 	}
 </script>
@@ -342,7 +343,25 @@
 					</button>
 				</div>
 				
-				<ModelSelector />
+				<div class="flex items-center gap-4">
+					<input
+						type="checkbox"
+						bind:checked={$isDeepResearch}
+						class="form-checkbox hidden"
+						id="deep-research-checkbox"
+					/>
+					<label
+						for="deep-research-checkbox"
+						class="
+							flex items-center gap-2 px-3 py-2 bg-white bg-opacity-5 hover:bg-opacity-10 rounded-lg transition-colors cursor-pointer
+							{$isDeepResearch ? 'bg-blue-500/30 text-blue-300' : ''}
+						"
+					>
+						<ScanSearch size={20} />
+						<span>Deep Research</span>
+					</label>
+					<ModelSelector />
+				</div>
 			</div>
 			
 			{#if error}
