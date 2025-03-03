@@ -38,9 +38,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		async start(controller) {
 			try {
 				// Track all phases and questions/answers
-				const phases: { questions: string[], answers: string[], allLinks: string[][] }[] = [];
+				const phases: { questions: string[], answers: string[], allLinks: string[][], tokens: number[] }[] = [];
 				let phaseIndex = 0;
 				let originalMessage = message;
+				let totalTokensUsed = 0;
 				
 				// Process research phases until no more questions are needed
 				do {
@@ -97,6 +98,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					// Step 2: Process each research question
 					const answers: string[] = [];
 					const allLinks: string[][] = [];
+					const questionTokens: number[] = [];
 					
 					for (let i = 0; i < questions.length; i++) {
 						const question = questions[i];
@@ -140,16 +142,21 @@ ${question}
 						const perplexityData = await perplexityResponse.json();
 						const answer = perplexityData.choices[0].message.content;
 						const links = perplexityData.citations || [];
+						const tokens = perplexityData.usage?.total_tokens || Math.ceil((question.length + answer.length) / 4); // estimation si non fourni
+						
+						totalTokensUsed += tokens;
+						questionTokens.push(tokens);
 						answers.push(answer);
 						allLinks.push(links);
 
-						// Send the answer
+						// Send the answer with token info
 						controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
 							type: 'answer', 
 							step: i + 1, 
 							phase: phaseIndex,
 							answer, 
-							links 
+							links,
+							tokens
 						})}\n\n`));
 					}
 					
@@ -157,7 +164,8 @@ ${question}
 					phases.push({
 						questions,
 						answers,
-						allLinks
+						allLinks,
+						tokens: questionTokens
 					});
 					
 					// Skip validation if this is already the second phase (limit to 2 phases)
@@ -239,18 +247,18 @@ References: ${phase.allLinks[i].join(", ")}`
 					).join('\n\n');
 				}).join('\n\n');
 				
-				const summaryResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-					method: "POST",
+				const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+					method: 'POST',
 					headers: {
-						"Content-Type": "application/json",
-						"Authorization": `Bearer ${OPENAI_API_KEY}`,
+						'Content-Type': 'application/json',
+						'Authorization': `Bearer ${OPENAI_API_KEY}`,
 					},
 					body: JSON.stringify({
 						model: 'o3-mini',
 						reasoning_effort: 'high',
 						messages: [
 							{
-								role: "user",
+								role: 'user',
 								content: `
 You are a research assistant. Your task is to synthesize the research findings into a clear, concise summary. Focus on the key insights and how they relate to the original question.
 Original question: ${message}
@@ -278,6 +286,13 @@ ${allResearchForSummary}
 				const summaryData = await summaryResponse.json();
 				const summary = summaryData.choices[0].message.content;
 
+				// Send token usage summary
+				controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+					type: 'token_usage',
+					totalTokens: totalTokensUsed,
+					phaseTokens: phases.map(phase => phase.tokens.reduce((sum, t) => sum + t, 0))
+				})}\n\n`));
+				
 				// Send the final summary
 				controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'summary', content: summary })}\n\n`));
 				controller.enqueue(encoder.encode('data: [DONE]\n\n'));

@@ -1,7 +1,7 @@
 <script lang='ts'>
 	import type { ResearchStep, ResearchPhase } from '$lib/types';
 	import { marked } from 'marked';
-	import { CheckCircle2, Circle, ChevronDown, Link } from 'lucide-svelte';
+	import { CheckCircle2, Circle, ChevronDown, Link, Zap } from 'lucide-svelte';
 	import ThinkBlock from './ThinkBlock.svelte';
 	import RawMarkdown from './RawMarkdown.svelte';
 	import { onDestroy } from 'svelte';
@@ -42,6 +42,12 @@
 
 	function formatTime(seconds: number): string {
 		return seconds.toFixed(1);
+	}
+
+	function formatTokens(tokens: number): string {
+		if (!tokens) return '';
+		if (tokens < 1000) return `${tokens}`;
+		return `${(tokens / 1000).toFixed(1)}K`;
 	}
 
 	function processThinkTags(text: string): string {
@@ -110,6 +116,12 @@
 							/>
 						</div>
 						<span>{phase.steps.filter(s => s.completed).length}/{phase.totalSteps} steps</span>
+						{#if phase.tokens}
+							<div class="flex items-center gap-1 text-amber-500 ml-2" title="Tokens used in this phase">
+								<Zap size={14} />
+								<span>{formatTokens(phase.tokens)}</span>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
@@ -144,15 +156,23 @@
 												<div class="h-6 w-48 bg-purple-400/20 animate-pulse rounded" />
 											{/if}
 										</h3>
-										{#if step.completed}
-											<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
-										{:else if step.startTime !== null && (i === 0 || phase.steps[i - 1]?.completed)}
-											<span class="text-sm text-gray-400">{formatTime(timers[phaseIndex * 1000 + i] || 0)}s</span>
-										{/if}
+										<div class="flex items-center gap-2">
+											{#if step.completed}
+												<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
+											{:else if step.startTime !== null && (i === 0 || phase.steps[i - 1]?.completed)}
+												<span class="text-sm text-gray-400">{formatTime(timers[phaseIndex * 1000 + i] || 0)}s</span>
+											{/if}
+											{#if step.tokens}
+												<div class="flex items-center gap-1 text-xs text-amber-500" title="Tokens used">
+													<Zap size={12} />
+													<span>{formatTokens(step.tokens)}</span>
+												</div>
+											{/if}
+										</div>
 									</div>
 									<ChevronDown
 										size={16}
-										class="transition-transform {expandedSteps.has(phaseIndex * 1000 + i) ? 'rotate-180' : ''} {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-0' : ''}"
+										class="transform transition-transform duration-200 {expandedSteps.has(phaseIndex * 1000 + i) ? 'rotate-180' : ''}"
 									/>
 								</button>
 								{#if expandedSteps.has(phaseIndex * 1000 + i)}
@@ -241,15 +261,23 @@
 										<div class="h-6 w-48 bg-purple-400/20 animate-pulse rounded" />
 									{/if}
 								</h3>
-								{#if step.completed}
-									<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
-								{:else if step.startTime !== null && (i === 0 || steps[i - 1]?.completed)}
-									<span class="text-sm text-gray-400">{formatTime(timers[i] || 0)}s</span>
-								{/if}
+								<div class="flex items-center gap-2">
+									{#if step.completed}
+										<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
+									{:else if step.startTime !== null && (i === 0 || steps[i - 1]?.completed)}
+										<span class="text-sm text-gray-400">{formatTime(timers[i] || 0)}s</span>
+									{/if}
+									{#if step.tokens}
+										<div class="flex items-center gap-1 text-xs text-amber-500" title="Tokens used">
+											<Zap size={12} />
+											<span>{formatTokens(step.tokens)}</span>
+										</div>
+									{/if}
+								</div>
 							</div>
 							<ChevronDown
 								size={16}
-								class="transition-transform {expandedSteps.has(i) ? 'rotate-180' : ''} {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-0' : ''}"
+								class="transform transition-transform duration-200 {expandedSteps.has(i) ? 'rotate-180' : ''}"
 							/>
 						</button>
 						{#if expandedSteps.has(i)}

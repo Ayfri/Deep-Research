@@ -2,7 +2,7 @@
 	import { conversations } from '$lib/stores/conversations';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { MessageSquare, Trash2 } from 'lucide-svelte';
+	import { MessageSquare, Trash2, Zap } from 'lucide-svelte';
 
 	function formatDate(timestamp: number) {
 		return new Intl.DateTimeFormat('fr-FR', {
@@ -18,6 +18,12 @@
 		const userMessage = messages.find(m => m.role === 'user');
 		if (!userMessage) return 'New conversation';
 		return userMessage.content.slice(0, 50) + (userMessage.content.length > 50 ? '...' : '');
+	}
+
+	function formatTokens(tokens: number) {
+		if (tokens === 0) return '';
+		if (tokens < 1000) return `${tokens}`;
+		return `${(tokens / 1000).toFixed(1)}K`;
 	}
 
 	function deleteConversation(id: string, event: MouseEvent) {
@@ -51,7 +57,15 @@
 					</button>
 				</div>
 				<p class="text-sm font-medium mb-1">{conversation.name || 'Nouvelle conversation'}</p>
-				<p class="text-xs text-gray-400 truncate">{getFirstMessage(conversation.messages)}</p>
+				<div class="flex justify-between items-center">
+					<p class="text-xs text-gray-400 truncate flex-1">{getFirstMessage(conversation.messages)}</p>
+					{#if conversation.totalTokens > 0}
+						<div class="flex items-center gap-1 text-xs text-amber-500" title="Total tokens used">
+							<Zap size={12} />
+							<span>{formatTokens(conversation.totalTokens)}</span>
+						</div>
+					{/if}
+				</div>
 			</a>
 		{/each}
 	</div>

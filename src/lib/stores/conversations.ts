@@ -10,6 +10,7 @@ export interface Conversation {
 	model: string;
 	isDeepResearch: boolean;
 	lastUpdated: number;
+	totalTokens: number;
 }
 
 function createConversationsStore() {
@@ -41,7 +42,8 @@ function createConversationsStore() {
 				messages: [],
 				model,
 				isDeepResearch: get(isDeepResearch),
-				lastUpdated: Date.now()
+				lastUpdated: Date.now(),
+				totalTokens: 0
 			};
 
 			update(conversations => {
@@ -52,13 +54,20 @@ function createConversationsStore() {
 
 			return id;
 		},
-		updateConversation: (id: string, messages: ChatMessage[], model: string, isDeepResearch: boolean) => {
+		updateConversation: (id: string, messages: ChatMessage[], model: string, isDeepResearch: boolean, totalTokens?: number) => {
 			if (!browser) return;
 			
 			update(conversations => {
 				const newConversations = conversations.map(conv =>
 					conv.id === id
-						? { ...conv, messages, model, isDeepResearch, lastUpdated: Date.now() }
+						? { 
+							...conv, 
+							messages, 
+							model, 
+							isDeepResearch, 
+							lastUpdated: Date.now(),
+							totalTokens: totalTokens !== undefined ? totalTokens : conv.totalTokens
+						}
 						: conv
 				);
 				saveToStorage(newConversations);

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, ScanSearch } from 'lucide-svelte';
+	import { Plus, ScanSearch, Zap } from 'lucide-svelte';
 	import type { Model, ChatMessage } from '$lib/types';
 	import type { PageData } from './$types';
 	import { conversations } from '$lib/stores/conversations';
@@ -20,12 +20,13 @@
 	let error: string | null = null;
 	let editingMessageIndex: number | null = null;
 	let editingContent = '';
+	let conversationTotalTokens = 0;
 
 	// Initialize the store
 	conversations.init();
 
 	async function createNewConversation() {
-		const newId = conversations.createConversation($model);
+		const newId = conversations.createConversation($model?.id);
 		await goto(`/?id=${newId}`);
 	}
 
@@ -66,7 +67,7 @@
 		}
 
 		// Update the conversation in the store
-		conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model, $isDeepResearch);
+		conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model?.id, $isDeepResearch);
 	}
 
 	function startEditing(index: number, content: string) {
@@ -99,7 +100,7 @@
 			editingContent = '';
 
 			// Update the conversation in the store
-			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model, $isDeepResearch);
+			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model?.id, $isDeepResearch);
 			return;
 		}
 
@@ -129,7 +130,7 @@
 		
 		// Create a new conversation if none exists
 		if (!conversationId) {
-			conversationId = conversations.createConversation($model);
+			conversationId = conversations.createConversation($model.id);
 			await goto(`/?id=${conversationId}`);
 		}
 
@@ -138,10 +139,20 @@
 		error = null;
 		
 		try {
-			const userChatMessage: ChatMessage = { role: 'user' as const, content: messageToSend };
+			const userChatMessage: ChatMessage = { 
+				role: 'user' as const, 
+				content: messageToSend,
+				tokens: {
+					prompt: Math.ceil(messageToSend.length / 4),
+					total: Math.ceil(messageToSend.length / 4)
+				}
+			};
 			const newChatHistory = [...chatHistory, userChatMessage];
 			chatHistory = newChatHistory;
-			conversations.updateConversation(conversationId, newChatHistory, $model, $isDeepResearch);
+			
+			conversationTotalTokens += userChatMessage.tokens?.total || 0;
+			
+			conversations.updateConversation(conversationId, newChatHistory, $model?.id, $isDeepResearch, conversationTotalTokens);
 
 			// Generate name if this is the first message
 			if (newChatHistory.length === 1) {
@@ -171,7 +182,12 @@
 				content: '',
 				links: [],
 				researchSteps: $isDeepResearch ? [] : undefined,
-				researchPhases: $isDeepResearch ? [] : undefined
+				researchPhases: $isDeepResearch ? [] : undefined,
+				tokens: {
+					prompt: 0,
+					completion: 0,
+					total: 0
+				}
 			};
 			const newChatHistoryWithAssistant = [...newChatHistory, assistantMessage];
 			chatHistory = newChatHistoryWithAssistant;
@@ -257,6 +273,14 @@
 								hasUpdate = true;
 							} else if (data.type === 'error') {
 								throw new Error(data.message);
+							} else if (data.type === 'token_usage') {
+								assistantMessage.tokens = {
+									prompt: userChatMessage.tokens?.prompt || 0,
+									completion: data.totalTokens,
+									total: (userChatMessage.tokens?.prompt || 0) + data.totalTokens
+								};
+								conversationTotalTokens += data.totalTokens;
+								hasUpdate = true;
 							}
 						} else {
 							if (data.choices?.[0]?.delta?.content) {
@@ -265,6 +289,11 @@
 							}
 							if (data.citations && Array.isArray(data.citations)) {
 								assistantMessage.links = [...new Set(data.citations as string[])];
+								hasUpdate = true;
+							}
+							if (data.tokens) {
+								assistantMessage.tokens = data.tokens;
+								conversationTotalTokens += data.tokens.total || 0;
 								hasUpdate = true;
 							}
 						}
@@ -279,7 +308,7 @@
 					// Update the conversation in the store every 500ms to avoid too frequent updates
 					const now = Date.now();
 					if (now - lastUpdate > 500) {
-						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model, $isDeepResearch);
+						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model?.id, $isDeepResearch, conversationTotalTokens);
 						lastUpdate = now;
 					}
 				}
@@ -303,10 +332,15 @@
 							assistantMessage.links = [...new Set(data.citations as string[])];
 							hasUpdate = true;
 						}
+						if (data.tokens) {
+							assistantMessage.tokens = data.tokens;
+							conversationTotalTokens += data.tokens.total || 0;
+							hasUpdate = true;
+						}
 					}
 					if (hasUpdate) {
 						chatHistory = newChatHistoryWithAssistant;
-						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model, $isDeepResearch);
+						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model?.id, $isDeepResearch, conversationTotalTokens);
 					}
 				} catch (e) {
 					console.error('Error parsing final buffer:', e);
@@ -319,7 +353,7 @@
 			chatHistory = chatHistory.slice(0, -1);
 			
 			if (conversationId) {
-				conversations.updateConversation(conversationId, chatHistory, $model, $isDeepResearch);
+				conversations.updateConversation(conversationId, chatHistory, $model?.id, $isDeepResearch);
 			}
 		} finally {
 			isLoading = false;
@@ -343,12 +377,13 @@
 		if (data.conversation) {
 			chatHistory = data.conversation.messages;
 			$isDeepResearch = data.conversation.isDeepResearch;
+			conversationTotalTokens = data.conversation.totalTokens || 0;
 		}
 	}
 
 	$: {
-		if (data.conversation && ($model !== data.conversation.model || $isDeepResearch !== data.conversation.isDeepResearch)) {
-			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model, $isDeepResearch);
+		if (data.conversation && ($model?.id !== data.conversation.model || $isDeepResearch !== data.conversation.isDeepResearch)) {
+			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model?.id, $isDeepResearch);
 		}
 	}
 </script>
@@ -404,6 +439,11 @@
 			<div class="space-y-6 mb-8">
 				{#each chatHistory as message, i}
 					<div class="backdrop-blur-lg bg-white/10 rounded-lg p-4 shadow-lg">
+						{#if message.tokens}
+							<div class="text-xs text-gray-500 mb-2 font-mono">
+								{message.role === 'user' ? `🔼 ${message.tokens.total || 0} tokens` : `🔽 ${message.tokens.total || 0} tokens (${message.tokens.completion || 0} générés)`}
+							</div>
+						{/if}
 						<div class="flex items-start gap-3">
 							<div class="w-8 h-8 rounded-full flex items-center justify-center {message.role === 'user' ? 'bg-purple-500' : 'bg-pink-500'}">
 								{message.role === 'user' ? '👤' : '🤖'}
@@ -472,11 +512,21 @@
 					</div>
 				{/if}
 			</div>
-			<MessageInput 
-				bind:message={message}
-				isLoading={isLoading}
-				onSubmit={(msg) => handleSubmit(msg)}
-			/>
+			
+			<div class="relative">
+				<MessageInput 
+					bind:message={message}
+					isLoading={isLoading}
+					onSubmit={(msg) => handleSubmit(msg)}
+				/>
+				
+				{#if conversationTotalTokens > 0}
+					<div class="absolute right-0 -top-6 flex items-center gap-1 text-xs text-amber-500 font-mono">
+						<Zap size={12} />
+						<span title="Total tokens used in this conversation">{conversationTotalTokens.toLocaleString()} tokens</span>
+					</div>
+				{/if}
+			</div>
 		</div>
 	</div>
 </div>

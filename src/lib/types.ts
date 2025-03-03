@@ -3,6 +3,7 @@ export interface Model {
 	name: string;
 	thinking: boolean;
 	tokens: number;
+	webSearch: boolean;
 }
 
 export interface ChatMessage {
@@ -11,6 +12,11 @@ export interface ChatMessage {
 	researchSteps?: ResearchStep[];
 	researchPhases?: ResearchPhase[];
 	role: 'user' | 'assistant';
+	tokens?: {
+		prompt?: number;
+		completion?: number;
+		total?: number;
+	};
 }
 
 export interface ResearchStep {
@@ -20,6 +26,7 @@ export interface ResearchStep {
 	links: string[];
 	question: string;
 	startTime: number | null;
+	tokens?: number;
 }
 
 export interface ResearchPhase {
@@ -27,6 +34,7 @@ export interface ResearchPhase {
 	title?: string;
 	totalSteps: number | null;
 	needsMoreQuestions?: boolean;
+	tokens?: number;
 }
 
 export interface DeepResearchUpdate {
@@ -39,5 +47,7 @@ export interface DeepResearchUpdate {
 	steps?: number;
 	phase?: number;
 	needsMoreQuestions?: boolean;
+	tokens?: number;
+	totalTokens?: number;
 	type: 'steps' | 'processing' | 'answer' | 'summary' | 'error' | 'validation' | 'new_phase';
 }

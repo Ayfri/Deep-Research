@@ -9,7 +9,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(500, 'API key not configured');
 	}
 
-	const response = await fetch('https://api.perplexity.ai/chat/completions', {
+	// Pour le streaming, on utilisera un post-traitement
+	const streamResponse = await fetch('https://api.perplexity.ai/chat/completions', {
 		method: 'POST',
 		headers: {
 			'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
@@ -22,12 +23,61 @@ export const POST: RequestHandler = async ({ request }) => {
 		})
 	});
 
-	if (!response.ok) {
-		throw error(response.status, 'API request failed');
+	if (!streamResponse.ok) {
+		throw error(streamResponse.status, 'API request failed');
+	}
+	
+	// Pour les modèles en streaming, estimer les tokens (approximation)
+	const encoder = new TextEncoder();
+	let totalCompletionTokens = 0;
+	
+	// Estimer les tokens de l'entrée (approximation grossière mais rapide)
+	// En moyenne un token représente environ 4 caractères en anglais
+	const promptTokens = Math.ceil(message.length / 4);
+	
+	// Traiter le stream pour estimer les tokens et les ajouter aux données
+	const transformStream = new TransformStream({
+		async transform(chunk, controller) {
+			const text = new TextDecoder().decode(chunk);
+			
+			// Envoyer le chunk tel quel
+			controller.enqueue(chunk);
+			
+			// Extraire le contenu pour estimer les tokens (si c'est un delta)
+			try {
+				if (text.startsWith('data: ') && !text.includes('[DONE]')) {
+					const data = JSON.parse(text.slice(5));
+					if (data.choices?.[0]?.delta?.content) {
+						// Estimer ~1 token pour chaque 4 caractères
+						totalCompletionTokens += Math.ceil(data.choices[0].delta.content.length / 4);
+					}
+				}
+			} catch (e) {
+				// Si erreur de parsing, ignorer silencieusement
+			}
+		},
+		async flush(controller) {
+			// À la fin du stream, envoyer les statistiques de tokens
+			controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+				tokens: {
+					prompt: promptTokens,
+					completion: totalCompletionTokens,
+					total: promptTokens + totalCompletionTokens
+				}
+			})}\n\n`));
+			
+			controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+		}
+	});
+
+	const responseStream = streamResponse.body?.pipeThrough(transformStream);
+
+	if (!responseStream) {
+		throw error(500, 'Failed to process stream');
 	}
 
-	// On transmet directement le stream de l'API
-	return new Response(response.body, {
+	// Retourner le stream transformé
+	return new Response(responseStream, {
 		headers: {
 			'Content-Type': 'text/event-stream',
 			'Cache-Control': 'no-cache',
