@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { SendHorizontal } from 'lucide-svelte';
 	import { draftMessage } from '$lib/stores/message';
-	import { onMount } from 'svelte';
-	
+
 	export let isLoading = false;
 	export let message = '';
+	
 	export let onSubmit: (message: string) => void;
 	
 	// Update draftMessage store whenever message changes
@@ -49,7 +49,7 @@
 	}
 </script>
 
-<form on:submit|preventDefault={handleSubmit} class="relative">
+<form on:submit|preventDefault={handleSubmit}>
 	<div class="relative">
 		<textarea
 			bind:value={message}

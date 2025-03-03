@@ -1,9 +1,8 @@
 <script lang='ts'>
-	import { ChevronDown, Brain, Bot, Search, Settings2, Globe } from 'lucide-svelte';
+	import { Brain, Bot, Globe } from 'lucide-svelte';
 	import type { Model } from '$lib/types';
-	import { model } from '$lib/stores/model';	
-
-	let isOpen = false;
+	import { model } from '$lib/stores/model';
+	import Select from './common/Select.svelte';
 
 	const models: Model[] = [
 		{ id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro', tokens: 128000, thinking: true, webSearch: true },
@@ -13,51 +12,58 @@
 		{ id: 'r1-1776', name: 'R1-1776', tokens: 128000, thinking: true, webSearch: false }
 	];
 
-	function selectModel(model: Model) {
-		$model = model;
-		isOpen = false;
+	function selectModel(modelId: string) {
+		const selectedModel = models.find(m => m.id === modelId);
+		if (selectedModel) {
+			$model = selectedModel;
+		}
 	}
 
 	function modelIcon(model: Model) {
 		if (model.thinking) return Brain;
 		return Bot;
 	}
+	
+	// Convertir les modèles au format attendu par le composant Select
+	const selectOptions = models.map(modelObj => ({
+		id: modelObj.id,
+		name: modelObj.name,
+		icon: modelIcon(modelObj),
+		// Ajouter les propriétés supplémentaires pour les utiliser dans les slots
+		thinking: modelObj.thinking,
+		webSearch: modelObj.webSearch
+	}));
 </script>
 
-<svelte:window on:click|stopPropagation={() => isOpen = false} />
-
-<div class="relative">
-	<button
-		class="flex items-center gap-2 px-3 py-2 w-60 bg-white bg-opacity-5 hover:bg-opacity-10 rounded-lg transition-colors"
-		on:click|stopPropagation={() => isOpen = !isOpen}
+<div class="relative w-60">
+	<Select 
+		id="model-selector"
+		options={selectOptions}
+		value={$model?.id || ''}
+		onChange={selectModel}
+		zIndex={30}
 	>
-		{#if $model}
-			<svelte:component this={modelIcon($model)} size={20} />
-			<span class="capitalize">{$model.name}</span>
-		{:else}
-			<span>Select a model</span>
-		{/if}
-		<ChevronDown size={16} class="ml-auto transition-transform {isOpen ? 'rotate-180' : ''}" />
-	</button>
-
-	{#if isOpen}
-		<div class="absolute right-0 top-full mt-2 w-60 bg-gray-800 bg-opacity-90 backdrop-blur border border-gray-700 border-opacity-50 rounded-lg shadow-lg overflow-hidden z-20">
-			{#each models as modelObject}
-				<button
-					class={modelObject.id === $model?.id ? 'w-full px-3 py-2 text-left hover:bg-white hover:bg-opacity-5 transition-colors flex items-center gap-3 bg-white bg-opacity-10' : 'w-full px-3 py-2 text-left hover:bg-white hover:bg-opacity-5 transition-colors flex items-center gap-3'}
-					on:click={() => selectModel(modelObject)}
-				>
-					<div title={`${modelObject.thinking ? 'Can think' : 'Simple answer'}`}>
-						<svelte:component this={modelIcon(modelObject)} size={20} />
-					</div>
-					{modelObject.name}
-					{#if modelObject.webSearch}
-						<div title="Has web search" class="ml-auto">
-							<Globe size={16} />
-						</div>
-					{/if}
-				</button>
-			{/each}
+		<div slot="selected">
+			{#if $model}
+				<div class="flex items-center gap-2 w-full">
+					<svelte:component this={modelIcon($model)} size={20} />
+					<span class="capitalize">{$model.name}</span>
+				</div>
+			{:else}
+				<span>Select a model</span>
+			{/if}
 		</div>
-	{/if}
+		
+		<div class="flex items-center gap-3 w-full" slot="option" let:option>
+			<div title={`${option.thinking ? 'Can think' : 'Simple answer'}`}>
+				<svelte:component this={option.icon} size={20} />
+			</div>
+			<span>{option.name}</span>
+			{#if option.webSearch}
+				<div title="Has web search" class="ml-auto">
+					<Globe size={16} />
+				</div>
+			{/if}
+		</div>
+	</Select>
 </div>

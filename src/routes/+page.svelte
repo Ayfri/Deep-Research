@@ -11,9 +11,11 @@
 	import ConversationsList from '$lib/components/ConversationsList.svelte';
 	import ResearchSteps from '$lib/components/ResearchSteps.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
+	import ResearchSettings from '$lib/components/ResearchSettings.svelte';
 	import { model, isDeepResearch } from '$lib/stores/model';
 	import { draftMessage } from '$lib/stores/message';
 	import { formatNumber } from '$lib/helpers/numbers';
+	import { openaiModel, autoQuestionCount, questionCount } from '$lib/stores/research';
 	
 	export let data: PageData;
 
@@ -74,7 +76,10 @@
 		}
 
 		// Update the conversation in the store
-		conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model?.id, $isDeepResearch);
+		const conversationId = $page.url.searchParams.get('id');
+		if (conversationId) {
+			conversations.updateConversation(conversationId, chatHistory, $model?.id || '', $isDeepResearch);
+		}
 	}
 
 	function startEditing(index: number, content: string) {
@@ -107,7 +112,10 @@
 			editingContent = '';
 
 			// Update the conversation in the store
-			conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model?.id, $isDeepResearch);
+			const conversationId = $page.url.searchParams.get('id');
+			if (conversationId) {
+				conversations.updateConversation(conversationId, chatHistory, $model?.id || '', $isDeepResearch);
+			}
 			return;
 		}
 
@@ -167,13 +175,23 @@
 			}
 			
 			const endpoint = $isDeepResearch ? '/api/deep-research' : '/api/chat';
+			const requestBody = $isDeepResearch 
+				? { 
+					message: messageToSend, 
+					model: $model,
+					openaiModel: $openaiModel,
+					autoQuestionCount: $autoQuestionCount,
+					questionCount: $questionCount
+				} 
+				: { 
+					message: messageToSend, 
+					model: $model 
+				};
+				
 			const response = await fetch(endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ 
-					message: messageToSend,
-					model: $model
-				})
+				body: JSON.stringify(requestBody)
 			});
 			
 			if (!response.ok) {
@@ -391,7 +409,10 @@
 	$: {
 		if (data.conversation && ($model?.id !== data.conversation.model || $isDeepResearch !== data.conversation.isDeepResearch)) {
 			if ($model) {
-				conversations.updateConversation($page.url.searchParams.get('id')!, chatHistory, $model.id, $isDeepResearch);
+				const conversationId = $page.url.searchParams.get('id');
+				if (conversationId) {
+					conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch);
+				}
 			}
 		}
 	}
@@ -438,6 +459,12 @@
 					<ModelSelector />
 				</div>
 			</div>
+			
+			{#if $isDeepResearch}
+				<div class="mb-6">
+					<ResearchSettings />
+				</div>
+			{/if}
 			
 			{#if error}
 				<div class="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg backdrop-blur-lg">
