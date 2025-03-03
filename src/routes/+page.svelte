@@ -12,9 +12,11 @@
 	import ResearchSteps from '$lib/components/ResearchSteps.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { model, isDeepResearch } from '$lib/stores/model';
+	import { draftMessage } from '$lib/stores/message';
+	
 	export let data: PageData;
 
-	let message = '';
+	let message = $draftMessage;
 	let chatHistory: ChatMessage[] = [];
 	let isLoading = false;
 	let error: string | null = null;

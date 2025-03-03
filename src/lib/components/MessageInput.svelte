@@ -1,15 +1,21 @@
 <script lang="ts">
 	import { SendHorizontal } from 'lucide-svelte';
+	import { draftMessage } from '$lib/stores/message';
+	import { onMount } from 'svelte';
 	
 	export let isLoading = false;
 	export let message = '';
 	export let onSubmit: (message: string) => void;
 	
+	// Update draftMessage store whenever message changes
+	$: $draftMessage = message;
+	
 	function handleSubmit() {
 		if (message.trim() && !isLoading) {
 			const messageToSend = message;
 			onSubmit(messageToSend);
-			// Ne pas effacer le message ici, c'est la responsabilité du composant parent
+			// Clear the draft after sending
+			$draftMessage = '';
 		}
 	}
 	
