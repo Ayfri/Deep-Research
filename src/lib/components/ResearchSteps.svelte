@@ -4,7 +4,7 @@
 	import { CheckCircle2, Circle, ChevronDown, Link, Zap } from 'lucide-svelte';
 	import ThinkBlock from './ThinkBlock.svelte';
 	import RawMarkdown from './RawMarkdown.svelte';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { formatNumber, formatCompactNumber } from '$lib/helpers/numbers';
 
 	export let steps: ResearchStep[] = [];
@@ -13,33 +13,45 @@
 
 	let expandedSteps = new Set<number>();
 	let timers: number[] = [];
+	let now = Date.now();
 
-	// Update timers every 100ms for active steps
+	// Update current time every 100ms to force reactivity
 	let interval: number | null = null;
-	$: if (steps.some(step => !step.completed && step.startTime !== null)) {
-		if (!interval) {
-			interval = setInterval(() => {
-				timers = steps.map((step, index) => {
-					// Only start timer if previous step is completed or it's the first step
-					const previousStepCompleted = index === 0 || steps[index - 1]?.completed;
-					if (!step.completed && step.startTime !== null && previousStepCompleted) {
-						return (Date.now() - step.startTime) / 1000;
-					}
-					return step.duration || 0;
-				});
-			}, 100);
-		}
-	} else if (interval) {
-		clearInterval(interval);
-		interval = null;
-	}
+	
+	onMount(() => {
+		interval = setInterval(() => {
+			now = Date.now();
+		}, 100);
+	});
 
 	// Cleanup on component destroy
 	onDestroy(() => {
 		if (interval) {
 			clearInterval(interval);
+			interval = null;
 		}
 	});
+
+	// Calculate timers reactively based on current time
+	$: timers = steps.map((step, index) => {
+		// Only start timer if previous step is completed or it's the first step
+		const previousStepCompleted = index === 0 || steps[index - 1]?.completed;
+		if (!step.completed && step.startTime !== null && previousStepCompleted) {
+			return (now - step.startTime) / 1000;
+		}
+		return step.duration || 0;
+	});
+
+	// Calculate phase timers
+	$: phaseTimers = phases.flatMap((phase, phaseIndex) => 
+		phase.steps.map((step, stepIndex) => {
+			const previousStepCompleted = stepIndex === 0 || phase.steps[stepIndex - 1]?.completed;
+			if (!step.completed && step.startTime !== null && previousStepCompleted) {
+				return (now - step.startTime) / 1000;
+			}
+			return step.duration || 0;
+		})
+	);
 
 	function formatTime(seconds: number): string {
 		return seconds.toFixed(1);
@@ -160,7 +172,7 @@
 											{#if step.completed}
 												<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
 											{:else if step.startTime !== null && (i === 0 || phase.steps[i - 1]?.completed)}
-												<span class="text-sm text-gray-400">{formatTime(timers[phaseIndex * 1000 + i] || 0)}s</span>
+												<span class="text-sm text-gray-400">{formatTime(phaseTimers[phaseIndex * phase.steps.length + i] || 0)}s</span>
 											{/if}
 											{#if step.tokens}
 												<div class="flex items-center gap-1 text-xs text-amber-500" title="Tokens used">

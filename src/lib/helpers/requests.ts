@@ -49,9 +49,13 @@ export async function callOpenAI({
 
         const body: Record<string, any> = {
             model,
-            messages,
-            temperature
+            messages
         };
+
+        // Add temperature for models that support it (not 'o' serie)
+        if (!model.startsWith('o')) {
+            body.temperature = temperature;
+        }
 
         // Add reasoning_effort for o3 models if specified
         if (reasoningEffort && model.startsWith('o3')) {
