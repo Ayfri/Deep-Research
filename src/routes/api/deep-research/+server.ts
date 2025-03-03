@@ -1,9 +1,10 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { OPENAI_API_KEY, PERPLEXITY_API_KEY } from '$env/static/private';
+import { callOpenAI, callPerplexity, safeJsonParse } from '$lib/helpers/requests';
 
 const RESEARCH_PROMPT = `You are a research assistant. Your task is to break down the user's query into specific research questions that will help provide a comprehensive answer.
-Generate from 4 to 20 specific research questions that will help answer the user's query, the number of questions depends on the complexity of the query, avoid unnecessary questions.
+Generate from 3 to 8 specific research questions that will help answer the user's query, the number of questions depends on the complexity of the query, avoid unnecessary questions.
 Each question should be focused and concise (1 sentence).
 Format your response as a JSON array of strings, each string being a research question.
 Example: ["What are the key components of X?", "How does Y impact Z?", ...]`;
@@ -55,73 +56,67 @@ export const POST: RequestHandler = async ({ request }) => {
 					}
 					
 					// Step 1: Get research questions from GPT-4o
-					const researchResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							'Authorization': `Bearer ${OPENAI_API_KEY}`
-						},
-						body: JSON.stringify({
+					console.log(`Generating research questions for phase ${phaseIndex}`);
+					try {
+						const { content: researchContent, tokens: researchTokens } = await callOpenAI({
 							model: 'gpt-4o',
 							messages: [
 								{ role: 'system', content: RESEARCH_PROMPT },
 								{ role: 'user', content: originalMessage }
 							],
 							temperature: 0.5
-						})
-					});
+						});
+						
+						totalTokensUsed += researchTokens;
+						
+						// Parse the questions with better error handling
+						const questions = safeJsonParse<string[]>(researchContent, []);
+						
+						if (questions.length === 0) {
+							console.error('Failed to parse questions or empty questions array:', researchContent);
+							throw new Error('Failed to generate valid research questions');
+						}
 
-					if (!researchResponse.ok) {
-						throw error(researchResponse.status, 'Failed to generate research questions');
-					}
-
-					const researchData = await researchResponse.json();
-					const questions = JSON.parse(researchData.choices[0].message.content);
-
-					// Send the number of steps and all questions immediately
-					controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-						type: 'steps', 
-						steps: questions.length,
-						phase: phaseIndex
-					})}\n\n`));
-					
-					// Send all questions immediately
-					for (let i = 0; i < questions.length; i++) {
+						// Send the number of steps and all questions immediately
 						controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-							type: 'processing', 
-							step: i + 1, 
-							phase: phaseIndex,
-							question: questions[i]
+							type: 'steps', 
+							steps: questions.length,
+							phase: phaseIndex
 						})}\n\n`));
-					}
+						
+						// Send all questions immediately
+						for (let i = 0; i < questions.length; i++) {
+							controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+								type: 'processing', 
+								step: i + 1, 
+								phase: phaseIndex,
+								question: questions[i]
+							})}\n\n`));
+						}
 
-					// Step 2: Process each research question
-					const answers: string[] = [];
-					const allLinks: string[][] = [];
-					const questionTokens: number[] = [];
-					
-					for (let i = 0; i < questions.length; i++) {
-						const question = questions[i];
+						// Step 2: Process each research question
+						const answers: string[] = [];
+						const allLinks: string[][] = [];
+						const questionTokens: number[] = [];
+						
+						for (let i = 0; i < questions.length; i++) {
+							const question = questions[i];
 
-						// Send the current question being processed
-						controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-							type: 'processing', 
-							step: i + 1, 
-							phase: phaseIndex,
-							question 
-						})}\n\n`));
+							// Send the current question being processed
+							controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+								type: 'processing', 
+								step: i + 1, 
+								phase: phaseIndex,
+								question 
+							})}\n\n`));
 
-						// Get answer from Perplexity
-						const perplexityResponse = await fetch('https://api.perplexity.ai/chat/completions', {
-							method: 'POST',
-							headers: {
-								'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-								'Content-Type': 'application/json'
-							},
-							body: JSON.stringify({
-								model: model?.id || 'sonar-reasoning-pro',
-								messages: [{
-									role: 'user', content: `
+							// Get answer from Perplexity
+							console.log(`Getting answer for question ${i + 1}: ${question}`);
+							try {
+								const { content: answer, links, tokens } = await callPerplexity({
+									model: model?.id || 'sonar-reasoning-pro',
+									messages: [{
+										role: 'user', content: `
 You are a research assistant. Your task is to answer the user's query based on the research findings.
 Original question: ${originalMessage}
 
@@ -130,76 +125,65 @@ ${questions.slice(0, i).map((q: string, index: number) => `${q}\nAnswer: ${answe
 
 Current research finding, reply to this question:
 ${question}
-									`.trim() }],
-								stream: false
-							})
-						});
+										`.trim() }],
+								});
+								
+								totalTokensUsed += tokens;
+								questionTokens.push(tokens);
+								answers.push(answer);
+								allLinks.push(links);
 
-						if (!perplexityResponse.ok) {
-							throw error(perplexityResponse.status, 'Failed to get answer from Perplexity');
+								// Send the answer with token info
+								controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+									type: 'answer', 
+									step: i + 1, 
+									phase: phaseIndex,
+									answer, 
+									links,
+									tokens
+								})}\n\n`));
+								
+								// Send token usage update after each answer
+								controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+									type: 'token_usage',
+									totalTokens: totalTokensUsed,
+									phaseTokens: phases.map(phase => phase.tokens.reduce((sum, t) => sum + t, 0))
+								})}\n\n`));
+							} catch (error) {
+								console.error(`Error getting answer for question ${i + 1}:`, error);
+								throw new Error(`Failed to get answer for question: ${question}`);
+							}
 						}
-
-						const perplexityData = await perplexityResponse.json();
-						const answer = perplexityData.choices[0].message.content;
-						const links = perplexityData.citations || [];
-						const tokens = perplexityData.usage?.total_tokens || Math.ceil((question.length + answer.length) / 4); // estimation si non fourni
 						
-						totalTokensUsed += tokens;
-						questionTokens.push(tokens);
-						answers.push(answer);
-						allLinks.push(links);
-
-						// Send the answer with token info
-						controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-							type: 'answer', 
-							step: i + 1, 
-							phase: phaseIndex,
-							answer, 
-							links,
-							tokens
-						})}\n\n`));
+						// Store the phase information
+						phases.push({
+							questions,
+							answers,
+							allLinks,
+							tokens: questionTokens
+						});
 						
-						// Send token usage update after each answer
-						controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-							type: 'token_usage',
-							totalTokens: totalTokensUsed,
-							phaseTokens: phases.map(phase => phase.tokens.reduce((sum, t) => sum + t, 0))
-						})}\n\n`));
-					}
-					
-					// Store the phase information
-					phases.push({
-						questions,
-						answers,
-						allLinks,
-						tokens: questionTokens
-					});
-					
-					// Skip validation if this is already the second phase (limit to 2 phases)
-					if (phaseIndex >= 1) {
-						break;
-					}
-					
-					// Validate if additional questions are needed
-					const allCompletedResearch = phases.map((phase: { questions: string[], answers: string[], allLinks: string[][] }, idx: number) => {
-						return phase.questions.map((q: string, i: number) => 
-							`Phase ${idx + 1}, Question ${i + 1}: ${q}\nAnswer: ${phase.answers[i]}`
-						).join('\n\n');
-					}).join('\n\n');
-					
-					const validationResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							'Authorization': `Bearer ${OPENAI_API_KEY}`
-						},
-						body: JSON.stringify({
-							model: 'gpt-4o',
-							messages: [
-								{ role: 'system', content: VALIDATION_PROMPT },
-								{ 
-									role: 'user', 
-									content: `
+						// Skip validation if this is already the second phase (limit to 2 phases)
+						if (phaseIndex >= 1) {
+							break;
+						}
+						
+						// Validate if additional questions are needed
+						const allCompletedResearch = phases.map((phase: { questions: string[], answers: string[], allLinks: string[][] }, idx: number) => {
+							return phase.questions.map((q: string, i: number) => 
+								`Phase ${idx + 1}, Question ${i + 1}: ${q}\nAnswer: ${phase.answers[i]}`
+							).join('\n\n');
+						}).join('\n\n');
+						
+						console.log('Validating if additional questions are needed');
+						try {
+							const { content: validationContent, tokens: validationTokens } = await callOpenAI({
+								model: 'gpt-4o',
+								messages: [
+									{ role: 'system', content: VALIDATION_PROMPT },
+									{ 
+										role: 'user', 
+										content: `
 Original question: ${originalMessage}
 
 Research conducted:
@@ -207,30 +191,30 @@ ${allCompletedResearch}
 
 Based on this research, determine if additional questions are needed to fully answer the original query.
 `.trim() 
-								}
-							],
-							temperature: 0.3
-						})
-					});
-					
-					if (!validationResponse.ok) {
-						throw error(validationResponse.status, 'Failed to validate research');
-					}
-					
-					const validationData = await validationResponse.json();
-					const validationResult = JSON.parse(validationData.choices[0].message.content);
-					
-					// Send validation result
-					controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-						type: 'validation', 
-						phase: phaseIndex,
-						needsMoreQuestions: validationResult.needsMoreQuestions
-					})}\n\n`));
-					
-					// If more questions are needed, set up for next phase
-					if (validationResult.needsMoreQuestions) {
-						phaseIndex++;
-						originalMessage = `
+									}
+								],
+								temperature: 0.3
+							});
+							
+							totalTokensUsed += validationTokens;
+							
+							// Parse the validation result with better error handling
+							const validationResult = safeJsonParse<{ needsMoreQuestions: boolean; additionalQuestions: string[] }>(
+								validationContent, 
+								{ needsMoreQuestions: false, additionalQuestions: [] }
+							);
+							
+							// Send validation result
+							controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+								type: 'validation', 
+								phase: phaseIndex,
+								needsMoreQuestions: validationResult.needsMoreQuestions
+							})}\n\n`));
+							
+							// If more questions are needed, set up for next phase
+							if (validationResult.needsMoreQuestions) {
+								phaseIndex++;
+								originalMessage = `
 Original question: ${originalMessage}
 
 Research already conducted:
@@ -239,10 +223,17 @@ ${allCompletedResearch}
 Please generate additional research questions to fill the following gaps:
 ${validationResult.additionalQuestions.join('\n')}
 `.trim();
-					} else {
-						break;
+							} else {
+								break;
+							}
+						} catch (error) {
+							console.error('Error validating research:', error);
+							throw new Error('Failed to validate research');
+						}
+					} catch (error) {
+						console.error(`Error in phase ${phaseIndex}:`, error);
+						throw error;
 					}
-					
 				} while (phaseIndex < 2); // Limit to 2 phases maximum
 				
 				// Step 3: Generate final summary with OpenAI including all phases
@@ -254,15 +245,10 @@ References: ${phase.allLinks[i].join(", ")}`
 					).join('\n\n');
 				}).join('\n\n');
 				
-				const summaryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						'Authorization': `Bearer ${OPENAI_API_KEY}`,
-					},
-					body: JSON.stringify({
+				console.log('Generating final summary');
+				try {
+					const { content: summary, tokens: summaryTokens } = await callOpenAI({
 						model: 'o3-mini',
-						reasoning_effort: 'high',
 						messages: [
 							{
 								role: 'user',
@@ -275,33 +261,25 @@ ${allResearchForSummary}
 `.trim(),
 							},
 						],
-					}),
-				});
+						reasoningEffort: 'high'
+					});
+					
+					totalTokensUsed += summaryTokens;
 
-				if (!summaryResponse.ok) {
-					const body = await summaryResponse.text();
-					try {
-						const data = JSON.parse(body);
-						console.error(data);
-						throw error(summaryResponse.status, data.error?.message || 'Failed to generate summary');
-					} catch (e) {
-						console.error(body);
-						throw error(summaryResponse.status, 'Failed to generate summary');
-					}
+					// Send token usage summary
+					controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+						type: 'token_usage',
+						totalTokens: totalTokensUsed,
+						phaseTokens: phases.map(phase => phase.tokens.reduce((sum, t) => sum + t, 0))
+					})}\n\n`));
+					
+					// Send the final summary
+					controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'summary', content: summary })}\n\n`));
+				} catch (error) {
+					console.error('Error generating summary:', error);
+					throw new Error('Failed to generate summary');
 				}
-
-				const summaryData = await summaryResponse.json();
-				const summary = summaryData.choices[0].message.content;
-
-				// Send token usage summary
-				controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-					type: 'token_usage',
-					totalTokens: totalTokensUsed,
-					phaseTokens: phases.map(phase => phase.tokens.reduce((sum, t) => sum + t, 0))
-				})}\n\n`));
 				
-				// Send the final summary
-				controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'summary', content: summary })}\n\n`));
 				controller.enqueue(encoder.encode('data: [DONE]\n\n'));
 			} catch (e) {
 				console.error('Error in deep research:', e);
