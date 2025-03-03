@@ -19,7 +19,7 @@ function createConversationsStore() {
 	// Load conversations from localStorage on initialization
 	const loadFromStorage = () => {
 		if (!browser) return;
-		const stored = localStorage.getItem('conversations');
+		const stored = localStorage.getItem('deep-research-conversations');
 		if (stored) {
 			set(JSON.parse(stored));
 		}
@@ -28,7 +28,7 @@ function createConversationsStore() {
 	// Save conversations to localStorage
 	const saveToStorage = (conversations: Conversation[]) => {
 		if (!browser) return;
-		localStorage.setItem('conversations', JSON.stringify(conversations));
+		localStorage.setItem('deep-research-conversations', JSON.stringify(conversations));
 	};
 
 	return {
@@ -99,7 +99,7 @@ function createConversationsStore() {
 		getConversation: (id: string) => {
 			if (!browser) return null;
 			
-			const stored = localStorage.getItem('conversations');
+			const stored = localStorage.getItem('deep-research-conversations');
 			if (!stored) return null;
 			
 			const conversations = JSON.parse(stored) as Conversation[];
