@@ -246,7 +246,8 @@ References: ${phase.allLinks[i].join(", ")}`
 						"Authorization": `Bearer ${OPENAI_API_KEY}`,
 					},
 					body: JSON.stringify({
-						model: "o1-preview",
+						model: 'o3-mini',
+						reasoning_effort: 'high',
 						messages: [
 							{
 								role: "user",
