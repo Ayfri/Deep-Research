@@ -1,5 +1,5 @@
 <script lang='ts'>
-	import type { ResearchStep } from '$lib/types';
+	import type { ResearchStep, ResearchPhase } from '$lib/types';
 	import { marked } from 'marked';
 	import { CheckCircle2, Circle, ChevronDown, Link } from 'lucide-svelte';
 	import ThinkBlock from './ThinkBlock.svelte';
@@ -8,6 +8,7 @@
 
 	export let steps: ResearchStep[] = [];
 	export let totalSteps: number | null = null;
+	export let phases: ResearchPhase[] = []; // New prop for multiple research phases
 
 	let expandedSteps = new Set<number>();
 	let timers: number[] = [];
@@ -93,97 +94,202 @@
 </script>
 
 <div class="space-y-4">
-	{#if totalSteps !== null}
-		<div class="flex items-center gap-2 text-sm text-gray-400">
-			<div class="h-1 flex-1 bg-gray-700 rounded-full overflow-hidden">
-				<div
-					class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
-					style="width: {(steps.filter(s => s.completed).length / totalSteps) * 100}%"
-				/>
-			</div>
-			<span>{steps.filter(s => s.completed).length}/{totalSteps} steps</span>
-		</div>
-	{/if}
+	{#if phases.length > 0}
+		{#each phases as phase, phaseIndex}
+			<div class="mb-6">
+				{#if phase.title}
+					<h3 class="text-lg font-medium text-purple-300 mb-2">{phase.title}</h3>
+				{/if}
+				
+				{#if phase.totalSteps !== null}
+					<div class="flex items-center gap-2 text-sm text-gray-400">
+						<div class="h-1 flex-1 bg-gray-700 rounded-full overflow-hidden">
+							<div
+								class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+								style="width: {(phase.steps.filter(s => s.completed).length / phase.totalSteps) * 100}%"
+							/>
+						</div>
+						<span>{phase.steps.filter(s => s.completed).length}/{phase.totalSteps} steps</span>
+					</div>
+				{/if}
 
-	<div class="space-y-4">
-		{#each steps as step, i}
-			<div class="relative pl-8">
-				<div class="absolute left-0 top-1 text-purple-400">
-					{#if step.completed}
-						<CheckCircle2 size={20} />
-					{:else if step.question}
-						<div class="animate-spin">
-							<Circle size={20} />
-						</div>
-					{:else}
-						<Circle size={20} />
-					{/if}
-				</div>
-				<div class="space-y-2">
-					<button
-						class="w-full flex items-center justify-between gap-2 font-medium text-purple-300 hover:text-purple-200 transition-colors text-left {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-50 cursor-not-allowed' : ''}"
-						on:click={() => {
-							if (step.question && (step.startTime || step.completed)) {
-								toggleStep(i);
-							}
-						}}
-					>
-						<div class="flex items-center gap-2 flex-1">
-							<h3>
-								{#if step.question}
-									{step.question}
+				<div class="space-y-4 mt-4">
+					{#each phase.steps as step, i}
+						<div class="relative pl-8">
+							<div class="absolute left-0 top-1 text-purple-400">
+								{#if step.completed}
+									<CheckCircle2 size={20} />
+								{:else if step.question}
+									<div class="animate-spin">
+										<Circle size={20} />
+									</div>
 								{:else}
-									<div class="h-6 w-48 bg-purple-400/20 animate-pulse rounded" />
+									<Circle size={20} />
 								{/if}
-							</h3>
-							{#if step.completed}
-								<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
-							{:else if step.startTime !== null && (i === 0 || steps[i - 1]?.completed)}
-								<span class="text-sm text-gray-400">{formatTime(timers[i] || 0)}s</span>
-							{/if}
-						</div>
-						<ChevronDown
-							size={16}
-							class="transition-transform {expandedSteps.has(i) ? 'rotate-180' : ''} {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-0' : ''}"
-						/>
-					</button>
-					{#if expandedSteps.has(i)}
-						<div class="text-sm text-gray-300">
-							{#if step.answer}
-								{#each formattedAnswers[i].split(/<svelte-think>(.*?)<\/svelte-think>/s) as part, j}
-									{#if j % 2 === 0}
-										<RawMarkdown content={part} />
-									{:else}
-										<ThinkBlock content={part} />
-									{/if}
-								{/each}
-								{#if step.links?.length}
-									<div class="mt-4 flex flex-wrap gap-2">
-										{#each step.links as link}
-											<a
-												href={link}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-400/10 hover:bg-purple-400/20 text-purple-300 rounded-full transition-colors"
-											>
-												<Link size={12} />
-												<span class="truncate max-w-[12rem]">{link}</span>
-											</a>
-										{/each}
+							</div>
+							<div class="space-y-2">
+								<button
+									class="w-full flex items-center justify-between gap-2 font-medium text-purple-300 hover:text-purple-200 transition-colors text-left {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-50 cursor-not-allowed' : ''}"
+									on:click={() => {
+										if (step.question && (step.startTime || step.completed)) {
+											toggleStep(phaseIndex * 1000 + i);
+										}
+									}}
+								>
+									<div class="flex items-center gap-2 flex-1">
+										<h3>
+											{#if step.question}
+												{step.question}
+											{:else}
+												<div class="h-6 w-48 bg-purple-400/20 animate-pulse rounded" />
+											{/if}
+										</h3>
+										{#if step.completed}
+											<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
+										{:else if step.startTime !== null && (i === 0 || phase.steps[i - 1]?.completed)}
+											<span class="text-sm text-gray-400">{formatTime(timers[phaseIndex * 1000 + i] || 0)}s</span>
+										{/if}
+									</div>
+									<ChevronDown
+										size={16}
+										class="transition-transform {expandedSteps.has(phaseIndex * 1000 + i) ? 'rotate-180' : ''} {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-0' : ''}"
+									/>
+								</button>
+								{#if expandedSteps.has(phaseIndex * 1000 + i)}
+									<div class="text-sm text-gray-300">
+										{#if step.answer}
+											{#each processThinkTags(step.answer).split(/<svelte-think>(.*?)<\/svelte-think>/s) as part, j}
+												{#if j % 2 === 0}
+													<RawMarkdown content={part} />
+												{:else}
+													<ThinkBlock content={part} />
+												{/if}
+											{/each}
+											{#if step.links?.length}
+												<div class="mt-4 flex flex-wrap gap-2">
+													{#each step.links as link}
+														<a
+															href={link}
+															target="_blank"
+															rel="noopener noreferrer"
+															class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-400/10 hover:bg-purple-400/20 text-purple-300 rounded-full transition-colors"
+														>
+															<Link size={12} />
+															<span class="truncate max-w-[12rem]">{link}</span>
+														</a>
+													{/each}
+												</div>
+											{/if}
+										{:else if step.question}
+											<div class="flex items-center gap-2 text-purple-400/50">
+												<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
+												<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.2s" />
+												<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.4s" />
+												<span class="ml-2">Research in progress...</span>
+											</div>
+										{/if}
 									</div>
 								{/if}
-							{:else if step.question}
-								<div class="flex items-center gap-2 text-purple-400/50">
-									<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
-									<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.2s" />
-									<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.4s" />
-									<span class="ml-2">Research in progress...</span>
-								</div>
-							{/if}
+							</div>
 						</div>
-					{/if}
+					{/each}
 				</div>
 			</div>
 		{/each}
-	</div>
+	{:else}
+		<!-- Legacy support for the old format -->
+		{#if totalSteps !== null}
+			<div class="flex items-center gap-2 text-sm text-gray-400">
+				<div class="h-1 flex-1 bg-gray-700 rounded-full overflow-hidden">
+					<div
+						class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+						style="width: {(steps.filter(s => s.completed).length / totalSteps) * 100}%"
+					/>
+				</div>
+				<span>{steps.filter(s => s.completed).length}/{totalSteps} steps</span>
+			</div>
+		{/if}
+
+		<div class="space-y-4">
+			{#each steps as step, i}
+				<div class="relative pl-8">
+					<div class="absolute left-0 top-1 text-purple-400">
+						{#if step.completed}
+							<CheckCircle2 size={20} />
+						{:else if step.question}
+							<div class="animate-spin">
+								<Circle size={20} />
+							</div>
+						{:else}
+							<Circle size={20} />
+						{/if}
+					</div>
+					<div class="space-y-2">
+						<button
+							class="w-full flex items-center justify-between gap-2 font-medium text-purple-300 hover:text-purple-200 transition-colors text-left {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-50 cursor-not-allowed' : ''}"
+							on:click={() => {
+								if (step.question && (step.startTime || step.completed)) {
+									toggleStep(i);
+								}
+							}}
+						>
+							<div class="flex items-center gap-2 flex-1">
+								<h3>
+									{#if step.question}
+										{step.question}
+									{:else}
+										<div class="h-6 w-48 bg-purple-400/20 animate-pulse rounded" />
+									{/if}
+								</h3>
+								{#if step.completed}
+									<span class="text-sm text-gray-400">{formatTime(step.duration || 0)}s</span>
+								{:else if step.startTime !== null && (i === 0 || steps[i - 1]?.completed)}
+									<span class="text-sm text-gray-400">{formatTime(timers[i] || 0)}s</span>
+								{/if}
+							</div>
+							<ChevronDown
+								size={16}
+								class="transition-transform {expandedSteps.has(i) ? 'rotate-180' : ''} {(!step.question || (!step.startTime && !step.completed)) ? 'opacity-0' : ''}"
+							/>
+						</button>
+						{#if expandedSteps.has(i)}
+							<div class="text-sm text-gray-300">
+								{#if step.answer}
+									{#each formattedAnswers[i].split(/<svelte-think>(.*?)<\/svelte-think>/s) as part, j}
+										{#if j % 2 === 0}
+											<RawMarkdown content={part} />
+										{:else}
+											<ThinkBlock content={part} />
+										{/if}
+									{/each}
+									{#if step.links?.length}
+										<div class="mt-4 flex flex-wrap gap-2">
+											{#each step.links as link}
+												<a
+													href={link}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-purple-400/10 hover:bg-purple-400/20 text-purple-300 rounded-full transition-colors"
+												>
+													<Link size={12} />
+													<span class="truncate max-w-[12rem]">{link}</span>
+												</a>
+											{/each}
+										</div>
+									{/if}
+								{:else if step.question}
+									<div class="flex items-center gap-2 text-purple-400/50">
+										<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
+										<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.2s" />
+										<div class="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0.4s" />
+										<span class="ml-2">Research in progress...</span>
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		</div>
+	{/if}
 </div>

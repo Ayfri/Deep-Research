@@ -16,7 +16,7 @@
 
 	function processThinkTags(text: string): string {
 		const thinkMatch = text.match(/<think>([\s\S]*?)(?:<\/think>|$)/);
-		if (!thinkMatch) return marked.parse(text);
+		if (!thinkMatch) return marked.parse(text) as string;
 
 		const beforeThink = text.slice(0, thinkMatch.index);
 		const thinkContent = thinkMatch[1];

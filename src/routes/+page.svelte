@@ -170,7 +170,8 @@
 				role: 'assistant' as const,
 				content: '',
 				links: [],
-				researchSteps: $isDeepResearch ? [] : undefined
+				researchSteps: $isDeepResearch ? [] : undefined,
+				researchPhases: $isDeepResearch ? [] : undefined
 			};
 			const newChatHistoryWithAssistant = [...newChatHistory, assistantMessage];
 			chatHistory = newChatHistoryWithAssistant;
@@ -179,6 +180,7 @@
 			let buffer = '';
 			let lastUpdate = Date.now();
 			let totalSteps: number | null = null;
+			let currentPhase = 0;
 
 			while (true) {
 				const { done, value } = await reader.read();
@@ -199,27 +201,55 @@
 						if ($isDeepResearch) {
 							if (data.type === 'steps') {
 								totalSteps = data.steps;
-								assistantMessage.researchSteps = Array(data.steps).fill(null).map(() => ({
-									question: '',
-									answer: '',
-									completed: false,
-									links: [],
-									startTime: null,
-									duration: null
-								}));
+								currentPhase = data.phase || 0;
+								
+								// Initialize phases array if it doesn't exist
+								if (!assistantMessage.researchPhases) {
+									assistantMessage.researchPhases = [];
+								}
+								
+								// Create a new phase
+								if (!assistantMessage.researchPhases[currentPhase]) {
+									assistantMessage.researchPhases[currentPhase] = {
+										steps: Array(data.steps).fill(null).map(() => ({
+											question: '',
+											answer: '',
+											completed: false,
+											links: [],
+											startTime: null,
+											duration: null
+										})),
+										totalSteps: data.steps,
+										title: currentPhase === 0 ? 'Initial Research' : 'Additional Research'
+									};
+								}
+								hasUpdate = true;
+							} else if (data.type === 'new_phase') {
+								currentPhase = data.phase || 0;
+								if (!assistantMessage.researchPhases) {
+									assistantMessage.researchPhases = [];
+								}
 								hasUpdate = true;
 							} else if (data.type === 'processing') {
-								if (assistantMessage.researchSteps?.[data.step - 1]) {
-									assistantMessage.researchSteps[data.step - 1].question = data.question;
-									assistantMessage.researchSteps[data.step - 1].startTime = Date.now();
+								currentPhase = data.phase || 0;
+								if (assistantMessage.researchPhases?.[currentPhase]?.steps[data.step - 1]) {
+									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].question = data.question;
+									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].startTime = Date.now();
 									hasUpdate = true;
 								}
 							} else if (data.type === 'answer') {
-								if (assistantMessage.researchSteps?.[data.step - 1]) {
-									assistantMessage.researchSteps[data.step - 1].answer = data.answer;
-									assistantMessage.researchSteps[data.step - 1].completed = true;
-									assistantMessage.researchSteps[data.step - 1].links = data.links || [];
-									assistantMessage.researchSteps[data.step - 1].duration = (Date.now() - (assistantMessage.researchSteps[data.step - 1].startTime || Date.now())) / 1000;
+								currentPhase = data.phase || 0;
+								if (assistantMessage.researchPhases?.[currentPhase]?.steps[data.step - 1]) {
+									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].answer = data.answer;
+									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].completed = true;
+									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].links = data.links || [];
+									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].duration = (Date.now() - (assistantMessage.researchPhases[currentPhase].steps[data.step - 1].startTime || Date.now())) / 1000;
+									hasUpdate = true;
+								}
+							} else if (data.type === 'validation') {
+								currentPhase = data.phase || 0;
+								if (assistantMessage.researchPhases?.[currentPhase]) {
+									assistantMessage.researchPhases[currentPhase].needsMoreQuestions = data.needsMoreQuestions;
 									hasUpdate = true;
 								}
 							} else if (data.type === 'summary') {
@@ -393,7 +423,11 @@
 										onEdit={() => startEditing(i, message.content)}
 										onRestart={() => restartFromMessage(i)}
 									/>
-									{#if message.researchSteps}
+									{#if message.researchPhases && message.researchPhases.length > 0}
+										<div class="mt-4">
+											<ResearchSteps phases={message.researchPhases} />
+										</div>
+									{:else if message.researchSteps}
 										<div class="mt-4">
 											<ResearchSteps steps={message.researchSteps} totalSteps={message.researchSteps.length} />
 										</div>

@@ -9,6 +9,7 @@ export interface ChatMessage {
 	content: string;
 	links?: string[];
 	researchSteps?: ResearchStep[];
+	researchPhases?: ResearchPhase[];
 	role: 'user' | 'assistant';
 }
 
@@ -21,6 +22,13 @@ export interface ResearchStep {
 	startTime: number | null;
 }
 
+export interface ResearchPhase {
+	steps: ResearchStep[];
+	title?: string;
+	totalSteps: number | null;
+	needsMoreQuestions?: boolean;
+}
+
 export interface DeepResearchUpdate {
 	answer?: string;
 	content?: string;
@@ -29,5 +37,7 @@ export interface DeepResearchUpdate {
 	question?: string;
 	step?: number;
 	steps?: number;
-	type: 'steps' | 'processing' | 'answer' | 'summary' | 'error';
+	phase?: number;
+	needsMoreQuestions?: boolean;
+	type: 'steps' | 'processing' | 'answer' | 'summary' | 'error' | 'validation' | 'new_phase';
 }
