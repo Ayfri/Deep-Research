@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SendHorizontal, Plus, ScanSearch } from 'lucide-svelte';
+	import { Plus, ScanSearch } from 'lucide-svelte';
 	import type { Model, ChatMessage } from '$lib/types';
 	import type { PageData } from './$types';
 	import { conversations } from '$lib/stores/conversations';
@@ -10,6 +10,7 @@
 	import Links from '$lib/components/Links.svelte';
 	import ConversationsList from '$lib/components/ConversationsList.svelte';
 	import ResearchSteps from '$lib/components/ResearchSteps.svelte';
+	import MessageInput from '$lib/components/MessageInput.svelte';
 	import { model, isDeepResearch } from '$lib/stores/model';
 	export let data: PageData;
 
@@ -133,7 +134,6 @@
 		}
 
 		isLoading = true;
-		const previousMessage = message;
 		message = '';
 		error = null;
 		
@@ -315,7 +315,7 @@
 		} catch (e) {
 			console.error('Error:', e);
 			error = e instanceof Error ? e.message : 'Failed to get response from API';
-			message = previousMessage;
+			message = messageToSend;
 			chatHistory = chatHistory.slice(0, -1);
 			
 			if (conversationId) {
@@ -327,6 +327,7 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
+		// Ne gérer les touches que lorsqu'un message est en cours d'édition
 		if (editingMessageIndex === null) return;
 		
 		if (event.key === 'Enter' && !event.shiftKey) {
@@ -383,8 +384,8 @@
 					<label
 						for="deep-research-checkbox"
 						class="
-							flex items-center gap-2 px-3 py-2 bg-white bg-opacity-5 hover:bg-opacity-10 rounded-lg transition-colors cursor-pointer
-							{$isDeepResearch ? 'bg-blue-500/30 text-blue-300' : ''}
+							flex items-center gap-2 px-3 py-2 hover:bg-opacity-10 rounded-lg transition-colors cursor-pointer
+							{$isDeepResearch ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10'}
 						"
 					>
 						<ScanSearch size={20} />
@@ -412,9 +413,29 @@
 									<textarea
 										id="editing-input"
 										bind:value={editingContent}
+										on:keydown={handleKeydown}
 										class="w-full bg-gray-800/50 backdrop-blur rounded p-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
 										rows={Math.max(3, editingContent.split('\n').length)}
-									/>
+										placeholder="Edit your message..."
+										autoFocus
+									></textarea>
+									<div class="flex justify-end mt-1 gap-2">
+										<button 
+											class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+											on:click={cancelEditing}
+										>
+											Cancel
+										</button>
+										<button 
+											class="px-2 py-1 text-xs bg-purple-700 hover:bg-purple-600 rounded"
+											on:click={submitEdit}
+										>
+											Save changes
+										</button>
+										<span class="ml-auto text-xs text-gray-400">
+											<kbd class="px-1 py-0.5 bg-gray-800 rounded text-xs">Enter</kbd> to save, <kbd class="px-1 py-0.5 bg-gray-800 rounded text-xs">Escape</kbd> to cancel
+										</span>
+									</div>
 								{:else}
 									<MessageContent
 										content={message.content}
@@ -451,22 +472,11 @@
 					</div>
 				{/if}
 			</div>
-			
-			<form on:submit|preventDefault={() => handleSubmit()} class="relative">
-				<input
-					type="text"
-					bind:value={message}
-					placeholder="Type your message..."
-					class="w-full bg-white/10 backdrop-blur-lg rounded-lg px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-				/>
-				<button
-					type="submit"
-					disabled={isLoading}
-					class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white hover:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed"
-				>
-					<SendHorizontal size={20} />
-				</button>
-			</form>
+			<MessageInput 
+				bind:message={message}
+				isLoading={isLoading}
+				onSubmit={(msg) => handleSubmit(msg)}
+			/>
 		</div>
 	</div>
 </div>
