@@ -119,7 +119,7 @@ export const POST: RequestHandler = async ({ request }) => {
 								'Content-Type': 'application/json'
 							},
 							body: JSON.stringify({
-								model: model || 'sonar-reasoning-pro',
+								model: model?.id || 'sonar-reasoning-pro',
 								messages: [{
 									role: 'user', content: `
 You are a research assistant. Your task is to answer the user's query based on the research findings.
@@ -157,6 +157,13 @@ ${question}
 							answer, 
 							links,
 							tokens
+						})}\n\n`));
+						
+						// Send token usage update after each answer
+						controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+							type: 'token_usage',
+							totalTokens: totalTokensUsed,
+							phaseTokens: phases.map(phase => phase.tokens.reduce((sum, t) => sum + t, 0))
 						})}\n\n`));
 					}
 					

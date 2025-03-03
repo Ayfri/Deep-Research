@@ -17,7 +17,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			'Content-Type': 'application/json',
 		},
 		body: JSON.stringify({
-			model: model || 'sonar-reasoning-pro',
+			model: model?.id || 'sonar-reasoning-pro',
 			messages: [{ role: 'user', content: message }],
 			stream: true
 		})
@@ -30,6 +30,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	// Pour les modèles en streaming, estimer les tokens (approximation)
 	const encoder = new TextEncoder();
 	let totalCompletionTokens = 0;
+	let lastTokenUpdate = 0;
 	
 	// Estimer les tokens de l'entrée (approximation grossière mais rapide)
 	// En moyenne un token représente environ 4 caractères en anglais
@@ -49,7 +50,21 @@ export const POST: RequestHandler = async ({ request }) => {
 					const data = JSON.parse(text.slice(5));
 					if (data.choices?.[0]?.delta?.content) {
 						// Estimer ~1 token pour chaque 4 caractères
-						totalCompletionTokens += Math.ceil(data.choices[0].delta.content.length / 4);
+						const newTokens = Math.ceil(data.choices[0].delta.content.length / 4);
+						totalCompletionTokens += newTokens;
+						
+						// Envoyer une mise à jour des tokens toutes les 5 tokens ou après 500ms
+						const now = Date.now();
+						if (newTokens >= 5 || now - lastTokenUpdate > 500) {
+							controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+								tokens: {
+									prompt: promptTokens,
+									completion: totalCompletionTokens,
+									total: promptTokens + totalCompletionTokens
+								}
+							})}\n\n`));
+							lastTokenUpdate = now;
+						}
 					}
 				}
 			} catch (e) {
@@ -57,7 +72,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		},
 		async flush(controller) {
-			// À la fin du stream, envoyer les statistiques de tokens
+			// À la fin du stream, envoyer les statistiques de tokens finales
 			controller.enqueue(encoder.encode(`data: ${JSON.stringify({
 				tokens: {
 					prompt: promptTokens,

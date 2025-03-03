@@ -5,6 +5,7 @@
 	import ThinkBlock from './ThinkBlock.svelte';
 	import RawMarkdown from './RawMarkdown.svelte';
 	import { onDestroy } from 'svelte';
+	import { formatNumber, formatCompactNumber } from '$lib/helpers/numbers';
 
 	export let steps: ResearchStep[] = [];
 	export let totalSteps: number | null = null;
@@ -46,8 +47,7 @@
 
 	function formatTokens(tokens: number): string {
 		if (!tokens) return '';
-		if (tokens < 1000) return `${tokens}`;
-		return `${(tokens / 1000).toFixed(1)}K`;
+		return formatCompactNumber(tokens);
 	}
 
 	function processThinkTags(text: string): string {
