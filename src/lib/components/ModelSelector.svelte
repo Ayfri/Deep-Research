@@ -5,6 +5,7 @@
 	import Select from './common/Select.svelte';
 
 	const models: Model[] = [
+		{ id: 'sonar-deep-research', name: 'Sonar Deep Research', tokens: 128000, thinking: true, webSearch: true },
 		{ id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro', tokens: 128000, thinking: true, webSearch: true },
 		{ id: 'sonar-reasoning', name: 'Sonar Reasoning', tokens: 128000, thinking: true, webSearch: true },
 		{ id: 'sonar-pro', name: 'Sonar Pro', tokens: 200000, thinking: false, webSearch: true },
@@ -23,7 +24,7 @@
 		if (model.thinking) return Brain;
 		return Bot;
 	}
-	
+
 	// Convertir les modèles au format attendu par le composant Select
 	const selectOptions = models.map(modelObj => ({
 		id: modelObj.id,
@@ -36,7 +37,7 @@
 </script>
 
 <div class="relative w-60">
-	<Select 
+	<Select
 		id="model-selector"
 		options={selectOptions}
 		value={$model?.id || ''}
@@ -53,7 +54,7 @@
 				<span>Select a model</span>
 			{/if}
 		</div>
-		
+
 		<div class="flex items-center gap-3 w-full" slot="option" let:option>
 			<div title={`${option.thinking ? 'Can think' : 'Simple answer'}`}>
 				<svelte:component this={option.icon} size={20} />
