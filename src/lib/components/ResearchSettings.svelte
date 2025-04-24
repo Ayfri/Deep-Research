@@ -28,10 +28,6 @@
 		return model.reasoning ? Brain : Bot;
 	}
 	
-	function handleAutoQuestionChange(event: CustomEvent<boolean>) {
-		$autoQuestionCount = event.detail;
-	}
-	
 	// Convertir les modèles au format attendu par le composant Select
 	const selectOptions = openaiModels.map(model => ({
 		id: model.id,
@@ -68,7 +64,6 @@
 					bind:checked={$autoQuestionCount} 
 					label="Auto" 
 					size="md"
-					on:change={handleAutoQuestionChange}
 				/>
 			</div>
 		</div>

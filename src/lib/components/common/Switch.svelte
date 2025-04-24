@@ -21,8 +21,8 @@
 	<input 
 		type="checkbox" 
 		class="sr-only peer" 
-		id={id}
-		bind:checked
+		{id}
+		{checked}
 		on:change={toggle}
 	>
 	<div class="relative {sizeClasses} bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:bg-white after:border-gray-300 after:border after:rounded-full after:transition-all peer-checked:bg-purple-600"></div>
