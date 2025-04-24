@@ -56,7 +56,7 @@
 			on:input={(e) => autoResizeTextarea(e.currentTarget)}
 			on:keydown={handleKeydown}
 			placeholder="Type your message..."
-			class="w-full bg-white/10 backdrop-blur-lg rounded-lg px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none min-h-[50px] max-h-[300px] overflow-y-auto"
+			class="w-full bg-white/10 rounded-lg px-4 py-3 pr-12 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none min-h-[50px] max-h-[300px] overflow-y-auto"
 			maxlength={1_000_000}
 			rows="1"
 			disabled={isLoading}

@@ -8,7 +8,7 @@
 	import MessageContent from '$lib/components/MessageContent.svelte';
 	import ModelSelector from '$lib/components/ModelSelector.svelte';
 	import Links from '$lib/components/Links.svelte';
-	import ConversationsList from '$lib/components/ConversationsList.svelte';
+	import Navbar from '$lib/components/Navbar.svelte';
 	import ResearchSteps from '$lib/components/ResearchSteps.svelte';
 	import MessageInput from '$lib/components/MessageInput.svelte';
 	import ResearchSettings from '$lib/components/ResearchSettings.svelte';
@@ -16,6 +16,7 @@
 	import { draftMessage } from '$lib/stores/message';
 	import { formatNumber } from '$lib/helpers/numbers';
 	import { openaiModel, autoQuestionCount, questionCount } from '$lib/stores/research';
+	import { openaiApiKey, perplexityApiKey } from '$lib/stores/apiKeys';
 	
 	export let data: PageData;
 
@@ -41,9 +42,17 @@
 
 	async function generateConversationName(messages: ChatMessage[]) {
 		try {
+			const headers: Record<string, string> = {
+				'Content-Type': 'application/json'
+			};
+			const currentOpenaiKey = $openaiApiKey;
+			if (currentOpenaiKey) {
+				headers['X-Openai-Api-Key'] = currentOpenaiKey;
+			}
+			
 			const response = await fetch('/api/name', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers,
 				body: JSON.stringify({
 					messages
 				})
@@ -188,9 +197,22 @@
 					model: $model 
 				};
 				
+			const headers: Record<string, string> = {
+				'Content-Type': 'application/json'
+			};
+			const currentPplxKey = $perplexityApiKey;
+			const currentOpenaiKey = $openaiApiKey;
+
+			if (currentPplxKey) {
+				headers['X-Perplexity-Api-Key'] = currentPplxKey;
+			}
+			if ($isDeepResearch && currentOpenaiKey) {
+				headers['X-Openai-Api-Key'] = currentOpenaiKey;
+			}
+			
 			const response = await fetch(endpoint, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers,
 				body: JSON.stringify(requestBody)
 			});
 			
@@ -421,7 +443,7 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <div class="min-h-screen bg-fixed bg-gradient-to-br from-gray-900 to-black text-white">
-	<ConversationsList />
+	<Navbar />
 	
 	<div class="pl-64">
 		<div class="max-w-4xl mx-auto p-4 md:p-8">

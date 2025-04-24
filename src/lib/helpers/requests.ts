@@ -47,7 +47,7 @@ export async function callOpenAI({
     try {
         const finalApiKey = apiKey || OPENAI_API_KEY;
         if (!finalApiKey) {
-            throw new Error('OpenAI API key not configured. Provide it via function call or server environment variable.');
+            throw new Error('OpenAI API key not configured. Provide it via Settings modal or server environment variable.');
         }
 
         const body: Record<string, any> = {
@@ -63,7 +63,7 @@ export async function callOpenAI({
         const effortModels = ["o3-mini", "o4-mini", "o3"];
 
         // Add reasoning_effort for o3 models if specified
-        if (reasoningEffort && effortModels.includes(model)) {
+        if (reasoningEffort && model.startsWith('o3')) {
             body.reasoning_effort = reasoningEffort;
         }
 
@@ -142,7 +142,7 @@ export async function callPerplexity({
     try {
         const finalApiKey = apiKey || PERPLEXITY_API_KEY;
         if (!finalApiKey) {
-            throw new Error('Perplexity API key not configured. Provide it via function call or server environment variable.');
+            throw new Error('Perplexity API key not configured. Provide it via Settings modal or server environment variable.');
         }
 
         console.log(`Calling Perplexity API with model: ${model}`);

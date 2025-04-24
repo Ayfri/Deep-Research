@@ -2,7 +2,10 @@
 	import { conversations } from '$lib/stores/conversations';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { MessageSquare, Trash2, Zap } from 'lucide-svelte';
+	import { MessageSquare, Settings, Trash2, Zap } from 'lucide-svelte';
+	import SettingsModal from './SettingsModal.svelte';
+
+	let showSettingsModal = false;
 
 	function formatDate(timestamp: number) {
 		return new Intl.DateTimeFormat('fr-FR', {
@@ -32,14 +35,19 @@
 		conversations.deleteConversation(id);
 		
 		if (id === $page.url.searchParams.get('id')) {
-			const newId = conversations.createConversation('sonar-reasoning-pro');
-			goto(`/?id=${newId}`);
+			const currentConversations = $conversations;
+			if (currentConversations.length > 0) {
+				goto(`/?id=${currentConversations[0].id}`);
+			} else {
+				const newId = conversations.createConversation('sonar-reasoning-pro'); // Or your default model
+				goto(`/?id=${newId}`);
+			}
 		}
 	}
 </script>
 
-<div class="fixed left-0 top-0 h-screen w-64 bg-gray-900/50 backdrop-blur border-r border-gray-700/50 p-4 overflow-y-auto">
-	<div class="space-y-2">
+<div class="fixed left-0 top-0 h-screen w-64 bg-gray-900/50 backdrop-blur border-r border-gray-700/50 flex flex-col">
+	<div class="flex-1 p-4 overflow-y-auto space-y-2">
 		{#each $conversations as conversation (conversation.id)}
 			<a
 				href="/?id={conversation.id}"
@@ -69,4 +77,18 @@
 			</a>
 		{/each}
 	</div>
-</div> 
+
+	<div class="p-4 border-t border-gray-700/50">
+		<button 
+			class="flex items-center gap-2 w-full p-2 rounded-lg hover:bg-white/10 text-gray-300 transition-colors"
+			on:click={() => showSettingsModal = true}
+		>
+			<Settings size={18} />
+			<span>API Key Settings</span>
+		</button>
+	</div>
+</div>
+
+{#if showSettingsModal}
+	<SettingsModal onClose={() => showSettingsModal = false} />
+{/if} 
