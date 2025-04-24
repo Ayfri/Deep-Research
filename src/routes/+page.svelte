@@ -495,7 +495,6 @@
 										class="w-full bg-gray-800/50 backdrop-blur rounded p-2 text-white resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
 										rows={Math.max(3, editingContent.split('\n').length)}
 										placeholder="Edit your message..."
-										autoFocus
 									></textarea>
 									<div class="flex justify-end mt-1 gap-2">
 										<button 
