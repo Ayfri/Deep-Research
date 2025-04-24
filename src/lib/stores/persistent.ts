@@ -1,7 +1,8 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 
 export function persistent<T>(key: string, startValue: T) {
-	if (typeof localStorage === 'undefined') {
+	if (!browser) {
 		return writable<T>(startValue);
 	}
 
