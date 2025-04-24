@@ -3,15 +3,9 @@
 	import type { Model } from '$lib/types';
 	import { model } from '$lib/stores/model';
 	import Select from './common/Select.svelte';
+	import { perplexityModels } from '$lib/config/models';
 
-	const models: Model[] = [
-		{ id: 'sonar-deep-research', name: 'Sonar Deep Research', tokens: 128000, thinking: true, webSearch: true },
-		{ id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro', tokens: 128000, thinking: true, webSearch: true },
-		{ id: 'sonar-reasoning', name: 'Sonar Reasoning', tokens: 128000, thinking: true, webSearch: true },
-		{ id: 'sonar-pro', name: 'Sonar Pro', tokens: 200000, thinking: false, webSearch: true },
-		{ id: 'sonar', name: 'Sonar', tokens: 128000, thinking: false, webSearch: true },
-		{ id: 'r1-1776', name: 'R1-1776', tokens: 128000, thinking: true, webSearch: false }
-	];
+	const models: Model[] = perplexityModels;
 
 	function modelIcon(model: Model) {
 		if (model.thinking) return Brain;

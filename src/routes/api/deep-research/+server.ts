@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { OPENAI_API_KEY, PERPLEXITY_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import { callOpenAI, callPerplexity, safeJsonParse } from '$lib/helpers/requests';
 
 const highEffortModels = ["o3-mini", "o4-mini", "o3"];
@@ -43,13 +43,16 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { message, model, openaiModel = 'o4-mini', autoQuestionCount = true, questionCount = 5 } = await request.json();
 
 	// Read API keys from headers, fallback to environment variables
-	const openaiApiKey = request.headers.get('X-Openai-Api-Key');
+	const openaiApiKey = request.headers.get('X-Openai-Api-Key') || env.OPENAI_API_KEY;
 	const perplexityApiKey = request.headers.get('X-Perplexity-Api-Key');
 
-	// No need to check here, helpers will check final key availability
-	// if (!OPENAI_API_KEY || !PERPLEXITY_API_KEY) {
-	// 	throw error(500, 'API keys not configured');
-	// }
+	if (!openaiApiKey) {
+		throw error(500, 'OpenAI API key not configured. Provide it via X-Openai-Api-Key header or server environment variable.');
+	}
+
+	if (!perplexityApiKey) {
+		throw error(500, 'Perplexity API key not configured. Provide it via X-Perplexity-Api-Key header or server environment variable.');
+	}
 
 	const encoder = new TextEncoder();
 	const stream = new ReadableStream({
@@ -249,10 +252,27 @@ export const POST: RequestHandler = async ({ request }) => {
 				controller.enqueue(encoder.encode('data: [DONE]\n\n'));
 			} catch (e) {
 				console.error('Error in deep research:', e);
+				
+				let errorMessage = 'An unknown error occurred during deep research';
+				let errorType = 'generic_error';
+
+				if (e instanceof Error) {
+					if (e.message.includes('OpenAI API key not configured') || e.message.includes('Perplexity API key not configured')) {
+						errorMessage = e.message; // Use the specific message from the helper
+						errorType = 'api_key_error';
+					} else {
+						errorMessage = e.message; // Use the generic error message
+					}
+				}
+
+				// Send a structured error message through the stream
 				controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
 					type: 'error', 
-					message: e instanceof Error ? e.message : 'An unknown error occurred'
+					errorType: errorType, // Add a type to distinguish API key errors
+					message: errorMessage
 				})}\n\n`));
+				// Also send [DONE] to signal the end, even on error
+				controller.enqueue(encoder.encode('data: [DONE]\n\n'));
 				controller.close();
 			}
 		}

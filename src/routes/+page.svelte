@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Plus, ScanSearch, Zap } from 'lucide-svelte';
 	import type { Model, ChatMessage } from '$lib/types';
+	import type { Conversation } from '$lib/stores/conversations';
 	import type { PageData } from './$types';
 	import { conversations } from '$lib/stores/conversations';
 	import { page } from '$app/stores';
@@ -17,6 +18,7 @@
 	import { formatNumber } from '$lib/helpers/numbers';
 	import { openaiModel, autoQuestionCount, questionCount } from '$lib/stores/research';
 	import { openaiApiKey, perplexityApiKey } from '$lib/stores/apiKeys';
+	import { perplexityModels } from '$lib/config/models';
 	
 	export let data: PageData;
 
@@ -27,6 +29,7 @@
 	let editingMessageIndex: number | null = null;
 	let editingContent = '';
 	let conversationTotalTokens = 0;
+	let assistantContentReceived = false;
 
 	// Initialize the store
 	conversations.init();
@@ -37,7 +40,7 @@
 			return;
 		}
 		const newId = conversations.createConversation($model.id);
-		await goto(`/?id=${newId}`);
+		await goto(`/?id=${newId}`, { replaceState: true });
 	}
 
 	async function generateConversationName(messages: ChatMessage[]) {
@@ -53,21 +56,33 @@
 			const response = await fetch('/api/name', {
 				method: 'POST',
 				headers,
-				body: JSON.stringify({
-					messages
-				})
+				body: JSON.stringify({ messages })
 			});
 
-			if (response.ok) {
-				const data = await response.json();
-				const name = data.choices[0].message.content.trim();
-				const conversationId = $page.url.searchParams.get('id');
-				if (conversationId) {
-					conversations.updateConversationName(conversationId, name);
+			if (!response.ok) {
+				try {
+					const errorBody = await response.json();
+					throw new Error(errorBody?.message || errorBody?.error?.message || `HTTP error ${response.status}`);
+				} catch (parseError) {
+					console.warn('Could not parse error response from /api/name', parseError);
+					throw new Error(`HTTP error ${response.status}`);
 				}
 			}
-		} catch (e) {
+			
+			const responseData = await response.json();
+			const name = responseData.choices[0].message.content.trim();
+			const conversationId = $page.url.searchParams.get('id');
+			if (conversationId) {
+				conversations.updateConversationName(conversationId, name);
+			}
+			
+		} catch (e: any) {
 			console.error('Failed to name conversation:', e);
+			if (e.message && (e.message.includes('OpenAI API key not configured') || e.message.includes('HTTP error 400'))) {
+				error = 'Failed to generate conversation name: OpenAI API key missing or invalid. Please check Settings.';
+			} else {
+				error = 'Failed to generate conversation name.';
+			}
 		}
 	}
 
@@ -77,14 +92,10 @@
 
 	function deleteMessage(index: number) {
 		if (index % 2 === 0) {
-			// If it's a user message, remove it and its response
 			chatHistory = chatHistory.filter((_, i) => i !== index && i !== index + 1);
 		} else {
-			// If it's an assistant message, remove it and its question
 			chatHistory = chatHistory.filter((_, i) => i !== index && i !== index - 1);
 		}
-
-		// Update the conversation in the store
 		const conversationId = $page.url.searchParams.get('id');
 		if (conversationId) {
 			conversations.updateConversation(conversationId, chatHistory, $model?.id || '', $isDeepResearch);
@@ -94,7 +105,6 @@
 	function startEditing(index: number, content: string) {
 		editingMessageIndex = index;
 		editingContent = content;
-		// Focus the input
 		setTimeout(() => {
 			const input = document.querySelector<HTMLInputElement>('#editing-input');
 			if (input) input.focus();
@@ -108,27 +118,17 @@
 
 	async function submitEdit() {
 		if (editingMessageIndex === null) return;
-		
 		const originalMessage = chatHistory[editingMessageIndex];
-
-		// If the message is from the assistant, only edit the content
 		if (originalMessage.role === 'assistant') {
-			chatHistory[editingMessageIndex] = {
-				...originalMessage,
-				content: editingContent
-			};
+			chatHistory[editingMessageIndex] = { ...originalMessage, content: editingContent };
 			editingMessageIndex = null;
 			editingContent = '';
-
-			// Update the conversation in the store
 			const conversationId = $page.url.searchParams.get('id');
 			if (conversationId) {
 				conversations.updateConversation(conversationId, chatHistory, $model?.id || '', $isDeepResearch);
 			}
 			return;
 		}
-
-		// For user messages, restart the conversation from this point
 		chatHistory = chatHistory.slice(0, editingMessageIndex);
 		await handleSubmit(editingContent);
 		editingMessageIndex = null;
@@ -144,143 +144,89 @@
 	async function handleSubmit(userMessage?: string) {
 		const messageToSend = userMessage ?? message;
 		if (!messageToSend.trim()) return;
-		
-		if (!$model) {
-			error = 'Please select a model first';
-			return;
-		}
+		if (!$model) { error = 'Please select a model first'; return; }
 
 		let conversationId = $page.url.searchParams.get('id');
-		
-		// Create a new conversation if none exists
 		if (!conversationId) {
 			conversationId = conversations.createConversation($model.id);
-			await goto(`/?id=${conversationId}`);
+			await goto(`/?id=${conversationId}`, { replaceState: true });
+			conversationId = $page.url.searchParams.get('id');
+			if (!conversationId) { error = 'Failed to create or switch to new conversation.'; return; }
 		}
 
 		isLoading = true;
 		message = '';
 		error = null;
-		
-		try {
-			const userChatMessage: ChatMessage = { 
-				role: 'user' as const, 
-				content: messageToSend,
-				tokens: {
-					prompt: Math.ceil(messageToSend.length / 4),
-					total: Math.ceil(messageToSend.length / 4)
-				}
-			};
-			const newChatHistory = [...chatHistory, userChatMessage];
-			chatHistory = newChatHistory;
-			
-			conversationTotalTokens += userChatMessage.tokens?.total || 0;
-			
-			conversations.updateConversation(conversationId, newChatHistory, $model.id, $isDeepResearch, conversationTotalTokens);
+		assistantContentReceived = false;
 
-			// Generate name if this is the first message
-			if (newChatHistory.length === 1) {
-				generateConversationName(newChatHistory);
-			}
-			
+		const userChatMessage: ChatMessage = {
+			role: 'user', content: messageToSend,
+			tokens: { prompt: Math.ceil(messageToSend.length / 4), completion: 0, total: Math.ceil(messageToSend.length / 4) }
+		};
+		const currentChatHistory = [...chatHistory, userChatMessage];
+		chatHistory = currentChatHistory;
+		conversationTotalTokens = currentChatHistory.reduce((sum, msg) => sum + (msg.tokens?.total || 0), 0);
+		conversations.updateConversation(conversationId, currentChatHistory, $model.id, $isDeepResearch, conversationTotalTokens);
+
+		if (currentChatHistory.length === 1) {
+			await generateConversationName(currentChatHistory);
+		}
+
+		const assistantMessage: ChatMessage = {
+			role: 'assistant', content: '', links: [],
+			researchSteps: $isDeepResearch ? [] : undefined,
+			researchPhases: $isDeepResearch ? [] : undefined,
+			tokens: { prompt: 0, completion: 0, total: 0 }
+		};
+		chatHistory = [...currentChatHistory, assistantMessage];
+
+		try {
 			const endpoint = $isDeepResearch ? '/api/deep-research' : '/api/chat';
 			const requestBody = $isDeepResearch 
-				? { 
-					message: messageToSend, 
-					model: $model,
-					openaiModel: $openaiModel,
-					autoQuestionCount: $autoQuestionCount,
-					questionCount: $questionCount
-				} 
-				: { 
-					message: messageToSend, 
-					model: $model 
-				};
-				
-			const headers: Record<string, string> = {
-				'Content-Type': 'application/json'
-			};
+				? { message: messageToSend, model: $model, openaiModel: $openaiModel, autoQuestionCount: $autoQuestionCount, questionCount: $questionCount }
+				: { message: messageToSend, model: $model };
+			const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 			const currentPplxKey = $perplexityApiKey;
 			const currentOpenaiKey = $openaiApiKey;
+			if (currentPplxKey) headers['X-Perplexity-Api-Key'] = currentPplxKey;
+			if ($isDeepResearch && currentOpenaiKey) headers['X-Openai-Api-Key'] = currentOpenaiKey;
+			
+			const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(requestBody) });
 
-			if (currentPplxKey) {
-				headers['X-Perplexity-Api-Key'] = currentPplxKey;
-			}
-			if ($isDeepResearch && currentOpenaiKey) {
-				headers['X-Openai-Api-Key'] = currentOpenaiKey;
-			}
-			
-			const response = await fetch(endpoint, {
-				method: 'POST',
-				headers,
-				body: JSON.stringify(requestBody)
-			});
-			
 			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
+				try {
+					const errorBody = await response.json();
+					throw new Error(errorBody?.error?.message || `HTTP error ${response.status}`);
+				} catch { throw new Error(`HTTP error ${response.status}`); }
 			}
-
-			if (!response.body) {
-				throw new Error('No response body available');
-			}
-
-			const assistantMessage: ChatMessage = {
-				role: 'assistant' as const,
-				content: '',
-				links: [],
-				researchSteps: $isDeepResearch ? [] : undefined,
-				researchPhases: $isDeepResearch ? [] : undefined,
-				tokens: {
-					prompt: 0,
-					completion: 0,
-					total: 0
-				}
-			};
-			const newChatHistoryWithAssistant = [...newChatHistory, assistantMessage];
-			chatHistory = newChatHistoryWithAssistant;
+			if (!response.body) throw new Error('No response body available');
 
 			const reader = response.body.getReader();
 			let buffer = '';
 			let lastUpdate = Date.now();
-			let totalSteps: number | null = null;
 			let currentPhase = 0;
 
 			while (true) {
 				const { done, value } = await reader.read();
 				if (done) break;
-
 				buffer += new TextDecoder().decode(value, { stream: true });
-				const lines = buffer.split('\n');
+				const lines = buffer.split('\\n');
 				buffer = lines.pop() || '';
 
 				let hasUpdate = false;
 				for (const line of lines) {
 					const trimmedLine = line.trim();
-					if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
-					if (trimmedLine.includes('[DONE]')) continue;
-
+					if (!trimmedLine || !trimmedLine.startsWith('data: ') || trimmedLine.includes('[DONE]')) continue;
 					try {
 						const data = JSON.parse(trimmedLine.slice(5));
 						if ($isDeepResearch) {
 							if (data.type === 'steps') {
-								totalSteps = data.steps;
 								currentPhase = data.phase || 0;
-								
-								// Initialize phases array if it doesn't exist
-								if (!assistantMessage.researchPhases) {
-									assistantMessage.researchPhases = [];
-								}
-								
-								// Create a new phase
+								if (!assistantMessage.researchPhases) assistantMessage.researchPhases = [];
 								if (!assistantMessage.researchPhases[currentPhase]) {
 									assistantMessage.researchPhases[currentPhase] = {
 										steps: Array(data.steps).fill(null).map(() => ({
-											question: '',
-											answer: '',
-											completed: false,
-											links: [],
-											startTime: null,
-											duration: null
+											question: '', answer: '', completed: false, links: [], startTime: null, duration: null
 										})),
 										totalSteps: data.steps,
 										title: currentPhase === 0 ? 'Initial Research' : 'Additional Research'
@@ -289,24 +235,29 @@
 								hasUpdate = true;
 							} else if (data.type === 'new_phase') {
 								currentPhase = data.phase || 0;
-								if (!assistantMessage.researchPhases) {
-									assistantMessage.researchPhases = [];
+								if (!assistantMessage.researchPhases) assistantMessage.researchPhases = [];
+								if (!assistantMessage.researchPhases[currentPhase]) {
+									assistantMessage.researchPhases[currentPhase] = { steps: [], totalSteps: 0, title: data.title || 'Additional Research' };
+								} else {
+									assistantMessage.researchPhases[currentPhase].title = data.title || assistantMessage.researchPhases[currentPhase].title;
 								}
 								hasUpdate = true;
 							} else if (data.type === 'processing') {
 								currentPhase = data.phase || 0;
 								if (assistantMessage.researchPhases?.[currentPhase]?.steps[data.step - 1]) {
-									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].question = data.question;
-									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].startTime = Date.now();
+									const step = assistantMessage.researchPhases[currentPhase].steps[data.step - 1];
+									step.question = data.question;
+									step.startTime = Date.now();
 									hasUpdate = true;
 								}
 							} else if (data.type === 'answer') {
 								currentPhase = data.phase || 0;
 								if (assistantMessage.researchPhases?.[currentPhase]?.steps[data.step - 1]) {
-									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].answer = data.answer;
-									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].completed = true;
-									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].links = data.links || [];
-									assistantMessage.researchPhases[currentPhase].steps[data.step - 1].duration = (Date.now() - (assistantMessage.researchPhases[currentPhase].steps[data.step - 1].startTime || Date.now())) / 1000;
+									const step = assistantMessage.researchPhases[currentPhase].steps[data.step - 1];
+									step.answer = data.answer;
+									step.completed = true;
+									step.links = data.links || [];
+									step.duration = (Date.now() - (step.startTime || Date.now())) / 1000;
 									hasUpdate = true;
 								}
 							} else if (data.type === 'validation') {
@@ -317,100 +268,77 @@
 								}
 							} else if (data.type === 'summary') {
 								assistantMessage.content = data.content;
+								assistantContentReceived = true;
 								hasUpdate = true;
 							} else if (data.type === 'error') {
-								throw new Error(data.message);
+								const errorWithType = new Error(data.message); 
+								(errorWithType as any).errorType = data.errorType;
+								throw errorWithType;
 							} else if (data.type === 'token_usage') {
-								assistantMessage.tokens = {
-									prompt: userChatMessage.tokens?.prompt || 0,
-									completion: data.totalTokens,
-									total: (userChatMessage.tokens?.prompt || 0) + data.totalTokens
-								};
-								conversationTotalTokens += data.totalTokens;
+								assistantMessage.tokens = { prompt: userChatMessage.tokens?.prompt || 0, completion: data.totalTokens, total: (userChatMessage.tokens?.prompt || 0) + data.totalTokens };
+								hasUpdate = true;
+							} else {
 								hasUpdate = true;
 							}
 						} else {
 							if (data.choices?.[0]?.delta?.content) {
 								assistantMessage.content += data.choices[0].delta.content;
+								assistantContentReceived = true;
 								hasUpdate = true;
 							}
 							if (data.citations && Array.isArray(data.citations)) {
-								assistantMessage.links = [...new Set(data.citations as string[])];
+								assistantMessage.links = [...new Set([...(assistantMessage.links || []), ...data.citations as string[]])];
 								hasUpdate = true;
 							}
 							if (data.tokens) {
 								assistantMessage.tokens = data.tokens;
-								conversationTotalTokens += data.tokens.total || 0;
 								hasUpdate = true;
 							}
 						}
-					} catch (e) {
-						console.error('Error parsing stream data:', e);
-						continue;
-					}
+					} catch (e) { console.error('Error parsing stream data line:', trimmedLine, e); continue; }
 				}
-
 				if (hasUpdate) {
-					chatHistory = newChatHistoryWithAssistant;
-					// Update the conversation in the store every 500ms to avoid too frequent updates
+					const historyWithoutAssistant = chatHistory.slice(0, -1);
+					conversationTotalTokens = historyWithoutAssistant.reduce((sum, msg) => sum + (msg.tokens?.total || 0), 0) + (assistantMessage.tokens?.total || 0);
+					chatHistory = [...historyWithoutAssistant, assistantMessage];
 					const now = Date.now();
-					if (now - lastUpdate > 500) {
-						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model.id, $isDeepResearch, conversationTotalTokens);
+					if (now - lastUpdate > 300) {
+						conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch, conversationTotalTokens);
 						lastUpdate = now;
 					}
 				}
 			}
 
-			if (buffer.trim()) {
-				try {
-					const data = JSON.parse(buffer.trim().slice(5));
-					let hasUpdate = false;
-					if ($isDeepResearch) {
-						if (data.type === 'summary') {
-							assistantMessage.content = data.content;
-							hasUpdate = true;
-						}
-					} else {
-						if (data.choices?.[0]?.delta?.content) {
-							assistantMessage.content += data.choices[0].delta.content;
-							hasUpdate = true;
-						}
-						if (data.citations && Array.isArray(data.citations)) {
-							assistantMessage.links = [...new Set(data.citations as string[])];
-							hasUpdate = true;
-						}
-						if (data.tokens) {
-							assistantMessage.tokens = data.tokens;
-							conversationTotalTokens += data.tokens.total || 0;
-							hasUpdate = true;
-						}
-					}
-					if (hasUpdate) {
-						chatHistory = newChatHistoryWithAssistant;
-						conversations.updateConversation(conversationId, newChatHistoryWithAssistant, $model.id, $isDeepResearch, conversationTotalTokens);
-					}
-				} catch (e) {
-					console.error('Error parsing final buffer:', e);
-				}
+			const finalHistoryWithoutAssistant = chatHistory.slice(0, -1);
+			conversationTotalTokens = finalHistoryWithoutAssistant.reduce((sum, msg) => sum + (msg.tokens?.total || 0), 0) + (assistantMessage.tokens?.total || 0);
+			chatHistory = [...finalHistoryWithoutAssistant, assistantMessage];
+			conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch, conversationTotalTokens);
+
+			if (!assistantContentReceived && !error) {
+				error = "Assistant did not provide a response.";
+				chatHistory = chatHistory.slice(0, -1);
+				conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch, conversationTotalTokens);
 			}
-		} catch (e) {
-			console.error('Error:', e);
-			error = e instanceof Error ? e.message : 'Failed to get response from API';
-			message = messageToSend;
+
+		} catch (e: any) {
+			console.error('Error during chat/research submission or streaming:', e);
+			if ((e.errorType === 'api_key_error') || (e instanceof Error && (e.message.includes('API key not configured') || e.message.includes('HTTP error 400')))) {
+				let baseMessage = e.message.includes('HTTP error 400') ? 'API request failed (status 400). This might be due to a missing or invalid API key.' : e.message;
+				error = baseMessage + ' Please check configuration in the Settings modal.';
+			} else {
+				error = e instanceof Error ? e.message : 'Failed to get response from API';
+			}
+			if (!assistantContentReceived) { message = messageToSend; }
 			chatHistory = chatHistory.slice(0, -1);
-			
-			if (conversationId) {
-				conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch);
-			}
+			conversationTotalTokens = chatHistory.reduce((sum, msg) => sum + (msg.tokens?.total || 0), 0);
+			conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch, conversationTotalTokens);
 		} finally {
 			isLoading = false;
 		}
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		// Ne gérer les touches que lorsqu'un message est en cours d'édition
 		if (editingMessageIndex === null) return;
-		
 		if (event.key === 'Enter' && !event.shiftKey) {
 			event.preventDefault();
 			submitEdit();
@@ -421,20 +349,40 @@
 	}
 
 	$: {
-		if (data.conversation) {
-			chatHistory = data.conversation.messages;
-			$isDeepResearch = data.conversation.isDeepResearch;
-			conversationTotalTokens = data.conversation.totalTokens || 0;
+		if ($page.url.searchParams.has('id')) {
+			const currentId = $page.url.searchParams.get('id');
+			const loadedConversation = conversations.getConversation(currentId!);
+			if (loadedConversation) {
+				chatHistory = loadedConversation.messages;
+				$isDeepResearch = loadedConversation.isDeepResearch;
+				$model = perplexityModels.find(m => m.id === loadedConversation.model) || perplexityModels[0] || null;
+				conversationTotalTokens = loadedConversation.totalTokens || 0;
+				error = null;
+			} else if (currentId !== 'new') {
+				console.warn(`Conversation with ID ${currentId} not found.`);
+				error = `Conversation with ID ${currentId} not found. Starting a new one.`;
+				goto('/', { replaceState: true });
+				chatHistory = [];
+				conversationTotalTokens = 0;
+			}
+		} else {
+			chatHistory = [];
+			conversationTotalTokens = 0;
+			error = null;
+			message = '';
+			if (!$model && perplexityModels.length > 0) {
+				$model = perplexityModels[0];
+			}
 		}
 	}
-
+	
 	$: {
-		if (data.conversation && ($model?.id !== data.conversation.model || $isDeepResearch !== data.conversation.isDeepResearch)) {
-			if ($model) {
-				const conversationId = $page.url.searchParams.get('id');
-				if (conversationId) {
-					conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch);
-				}
+		const conversationId = $page.url.searchParams.get('id');
+		if (conversationId && $model) {
+			const currentConversation = conversations.getConversation(conversationId);
+			if (currentConversation && (currentConversation.model !== $model.id || currentConversation.isDeepResearch !== $isDeepResearch)) {
+				const updatedTotalTokens = chatHistory.reduce((sum, msg) => sum + (msg.tokens?.total || 0), 0);
+				conversations.updateConversation(conversationId, chatHistory, $model.id, $isDeepResearch, updatedTotalTokens);
 			}
 		}
 	}
@@ -589,3 +537,4 @@
 		</div>
 	</div>
 </div>
+

@@ -1,4 +1,4 @@
-import { OPENAI_API_KEY, PERPLEXITY_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 type Message = {
     role: 'system' | 'user' | 'assistant';
@@ -45,7 +45,7 @@ export async function callOpenAI({
     apiKey?: string;
 }): Promise<{ content: string; tokens: number }> {
     try {
-        const finalApiKey = apiKey || OPENAI_API_KEY;
+        const finalApiKey = apiKey || env.OPENAI_API_KEY;
         if (!finalApiKey) {
             throw new Error('OpenAI API key not configured. Provide it via Settings modal or server environment variable.');
         }
@@ -140,7 +140,7 @@ export async function callPerplexity({
     apiKey?: string;
 }): Promise<{ content: string; links: string[]; tokens: number }> {
     try {
-        const finalApiKey = apiKey || PERPLEXITY_API_KEY;
+        const finalApiKey = apiKey || env.PERPLEXITY_API_KEY;
         if (!finalApiKey) {
             throw new Error('Perplexity API key not configured. Provide it via Settings modal or server environment variable.');
         }

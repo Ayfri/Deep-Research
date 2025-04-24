@@ -1,15 +1,14 @@
-import { json } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { OPENAI_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const { messages } = await request.json();
 	
 	// Read API key from header or fall back to environment variable
-	const apiKey = request.headers.get('X-Openai-Api-Key') || OPENAI_API_KEY;
-	
+	const apiKey = request.headers.get('X-Openai-Api-Key') || env.OPENAI_API_KEY;
 	if (!apiKey) {
-		throw new Error('OpenAI API key not configured. Provide it via X-Openai-Api-Key header or server environment variable.');
+		throw error(400, 'OpenAI API key not configured. Provide it via X-Openai-Api-Key header or server environment variable.');
 	}
 
 	const firstUserMessage = messages.find((m: any) => m.role === 'user')?.content || '';
@@ -32,7 +31,13 @@ export const POST: RequestHandler = async ({ request }) => {
 	});
 
 	if (!response.ok) {
-		throw new Error('Failed to fetch from OpenAI API');
+		try {
+			const errorBody = await response.json();
+			throw error(response.status, errorBody?.error?.message || 'Failed to fetch from OpenAI API');
+		} catch (e: any) {
+			if (e.status) throw e;
+			throw error(response.status, 'Failed to fetch from OpenAI API');
+		}
 	}
 
 	const data = await response.json();

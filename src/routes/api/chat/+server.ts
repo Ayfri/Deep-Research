@@ -1,15 +1,15 @@
-import { error } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { PERPLEXITY_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const { message, model } = await request.json();
 	
 	// Read API key from header or fall back to environment variable
-	const apiKey = request.headers.get('X-Perplexity-Api-Key') || PERPLEXITY_API_KEY;
-
+	const apiKey = request.headers.get('X-Perplexity-Api-Key') || env.PERPLEXITY_API_KEY;
 	if (!apiKey) {
-		throw error(500, 'API key not configured. Provide it via X-Perplexity-Api-Key header or server environment variable.');
+		// Use 400 Bad Request for configuration issues and return JSON
+		return json({ error: { message: 'Perplexity API key not configured. Provide it via X-Perplexity-Api-Key header or server environment variable.' } }, { status: 400 });
 	}
 
 	// Pour le streaming, on utilisera un post-traitement
@@ -27,7 +27,13 @@ export const POST: RequestHandler = async ({ request }) => {
 	});
 
 	if (!streamResponse.ok) {
-		throw error(streamResponse.status, 'API request failed');
+		// Try to parse error from Perplexity, otherwise return generic error
+		try {
+			const errorBody = await streamResponse.json();
+			return json({ error: { message: errorBody?.error?.message || 'Perplexity API request failed' } }, { status: streamResponse.status });
+		} catch {
+			return json({ error: { message: 'Perplexity API request failed' } }, { status: streamResponse.status });
+		}
 	}
 	
 	// Pour les modèles en streaming, estimer les tokens (approximation)
