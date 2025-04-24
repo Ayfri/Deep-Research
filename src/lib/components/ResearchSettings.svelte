@@ -14,10 +14,13 @@
 	
 	// OpenAI models for deep research
 	const openaiModels: OpenAIModel[] = [
+		{ id: 'o4-mini', name: 'o4-mini (high)', reasoning: true, reasoningEffort: 'high' },
 		{ id: 'o3-mini', name: 'o3-mini (high)', reasoning: true, reasoningEffort: 'high' },
+		{ id: 'o3', name: 'o3 (high)', reasoning: true, reasoningEffort: 'high' },
 		{ id: 'o1-mini', name: 'o1-mini', reasoning: true, reasoningEffort: null },
 		{ id: 'o1-preview', name: 'o1-preview', reasoning: true, reasoningEffort: null },
 		{ id: 'o1', name: 'o1', reasoning: true, reasoningEffort: null },
+		{ id: 'o1-pro', name: 'o1-pro (pricey)', reasoning: true, reasoningEffort: null },
 		{ id: '4o', name: '4o', reasoning: false, reasoningEffort: null }
 	];
 
