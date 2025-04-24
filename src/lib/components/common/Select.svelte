@@ -8,19 +8,14 @@
 	export let options: Array<{ id: string; name: string; icon?: ComponentType<Icon>; [key: string]: any }> = [];
 	export let value: string;
 	export let zIndex: number = 10;
-
-	export let onChange: (value: string) => void = () => {};
 	
 	let isOpen = false;
 	
-	function getSelectedOption() {
-		return options.find(option => option.id === value) || options[0];
-	}
-	
+	$: selectedOption = options.find(option => option.id === value) || options[0];
+
 	function selectOption(optionId: string) {
 		value = optionId;
 		isOpen = false;
-		onChange(optionId);
 	}
 	
 	function handleClickOutside() {
@@ -41,12 +36,12 @@
 		on:click|stopPropagation={() => isOpen = !isOpen}
 	>
 		{#if $$slots.selected}
-			<slot name="selected" option={getSelectedOption()} value={value} />
+			<slot name="selected" option={selectedOption} value={value} />
 		{:else}
-			{#if icon || getSelectedOption().icon}
-				<svelte:component this={icon || getSelectedOption().icon} size={16} />
+			{#if icon || selectedOption?.icon}
+				<svelte:component this={icon || selectedOption.icon} size={16} />
 			{/if}
-			<span>{getSelectedOption().name}</span>
+			<span>{selectedOption?.name}</span>
 		{/if}
 		<ChevronDown size={14} class="ml-auto transition-transform {isOpen ? 'rotate-180' : ''}" />
 	</button>

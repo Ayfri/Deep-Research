@@ -28,10 +28,6 @@
 		return model.reasoning ? Brain : Bot;
 	}
 	
-	function handleModelChange(modelId: string) {
-		$openaiModel = modelId;
-	}
-	
 	function handleAutoQuestionChange(event: CustomEvent<boolean>) {
 		$autoQuestionCount = event.detail;
 	}
@@ -61,7 +57,6 @@
 		}))}
 		bind:value={$openaiModel}
 		label="OpenAI Model"
-		onChange={handleModelChange}
 	/>
 	
 	<div>

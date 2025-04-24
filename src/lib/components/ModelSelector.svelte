@@ -13,13 +13,6 @@
 		{ id: 'r1-1776', name: 'R1-1776', tokens: 128000, thinking: true, webSearch: false }
 	];
 
-	function selectModel(modelId: string) {
-		const selectedModel = models.find(m => m.id === modelId);
-		if (selectedModel) {
-			$model = selectedModel;
-		}
-	}
-
 	function modelIcon(model: Model) {
 		if (model.thinking) return Brain;
 		return Bot;
@@ -34,14 +27,16 @@
 		thinking: modelObj.thinking,
 		webSearch: modelObj.webSearch
 	}));
+
+	let modelId = $model?.id ?? '';
+	$: $model = models.find(m => m.id === modelId);
 </script>
 
 <div class="relative w-60">
 	<Select
 		id="model-selector"
 		options={selectOptions}
-		value={$model?.id || ''}
-		onChange={selectModel}
+		bind:value={modelId}
 		zIndex={30}
 	>
 		<div slot="selected">
