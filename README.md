@@ -59,6 +59,9 @@
   - Dark mode
   - Smooth animations
   - Support for links and references
+  - ⚙️ **Flexible API Key Management**
+    - Configure API keys directly in the UI (stored in `localStorage`)
+    - Fallback to server-side environment variables if UI keys are not set
 
 ## Preview 📸
 
@@ -66,6 +69,9 @@
 
 ### Deep Research Mode
 <img src="images/preview1.png" alt="Deep Research Mode" width="80%"/>
+
+### Settings Modal
+<img src="images/preview3.png" alt="Settings Modal" width="80%"/>
 
 ### Chat Interface
 <img src="images/preview2.png" alt="Chat Interface" width="80%"/>
@@ -77,8 +83,8 @@
 ### Prerequisites
 - Node.js (v16+)
 - pnpm (v6+)
-- Perplexity API key
-- OpenAI API key
+- Perplexity API key (Optional, can be set in UI)
+- OpenAI API key (Optional, can be set in UI)
 
 ### Setup Steps
 
@@ -100,6 +106,7 @@
    PERPLEXITY_API_KEY=your_perplexity_api_key
    OPENAI_API_KEY=your_openai_api_key
    ```
+   *Note: These server-side keys are optional if you plan to configure them via the UI.*
 
 4. **Start the development server**
    ```bash
@@ -118,6 +125,7 @@
 4. For Deep Research mode, configure:
    - OpenAI model for analysis
    - Question count (auto or manual)
+5. **(Optional) Configure API Keys**: Click the "API Key Settings" button in the bottom-left navbar to enter your Perplexity and OpenAI keys. These will be saved in your browser.
 
 ## Technologies Used 🧰
 
@@ -184,6 +192,15 @@ The Deep Research mode includes configurable settings:
 | Reasoning | High / Standard | Different reasoning approaches based on model |
 
 ## Contribution 🤝
+
+### API Key Management
+
+This application supports two ways to provide API keys:
+
+1.  **UI Configuration (Recommended for Local Use)**: Use the "API Key Settings" modal (accessible from the navbar) to enter your Perplexity and OpenAI keys. These are stored securely in your browser's `localStorage` and sent with each request.
+2.  **Server Environment Variables**: Set `PERPLEXITY_API_KEY` and `OPENAI_API_KEY` in a `.env` file at the project root. This is suitable for deployed environments or if you prefer not to store keys in the browser.
+
+The application prioritizes keys set in the UI. If UI keys are not found, it falls back to using the environment variables.
 
 Contributions are welcome! Please follow these steps:
 
