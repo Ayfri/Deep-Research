@@ -105,32 +105,24 @@ export const POST: RequestHandler = async ({ request }) => {
 							throw new Error('Failed to generate valid research questions');
 						}
 
-						// Send the number of steps and all questions immediately
+						// Send the number of steps AND all questions immediately in one event
 						controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
 							type: 'steps', 
 							steps: questions.length,
-							phase: phaseIndex
+							phase: phaseIndex,
+							questions: questions // Include questions array
 						})}\n\n`));
 						
-						// Send all questions immediately
-						for (let i = 0; i < questions.length; i++) {
-							controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-								type: 'processing', 
-								step: i + 1, 
-								phase: phaseIndex,
-								question: questions[i]
-							})}\n\n`));
-						}
-
 						// Step 2: Process each research question
 						const answers: string[] = [];
 						const allLinks: string[][] = [];
 						const questionTokens: number[] = [];
 						
+						// Use the questions received earlier
 						for (let i = 0; i < questions.length; i++) {
 							const question = questions[i];
 
-							// Send the current question being processed
+							// Send the current question being processed (still useful to indicate start)
 							controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
 								type: 'processing', 
 								step: i + 1, 
@@ -141,27 +133,74 @@ export const POST: RequestHandler = async ({ request }) => {
 							// Get answer from Perplexity
 							console.log(`Getting answer for question ${i + 1}: ${question}`);
 							try {
-								const { content, links, tokens } = await callPerplexity({
+								// Call Perplexity with streaming enabled
+								const perplexityResponse = await callPerplexity({
 									model: model.id,
 									messages: [{ role: 'user', content: question }],
-									apiKey: perplexityApiKey || undefined
+									apiKey: perplexityApiKey || undefined,
+									stream: true // Request stream
 								});
-								
-								totalTokensUsed += tokens;
-								questionTokens.push(tokens);
-								
-								// Store the answer and links
-								answers.push(content);
-								allLinks.push(links);
-								
-								// Send the answer
-								controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
-									type: 'answer', 
-									step: i + 1, 
+
+								// Ensure we got a Response object (for type safety)
+								if (!(perplexityResponse instanceof Response) || !perplexityResponse.body) {
+									throw new Error('Failed to get a streaming response from Perplexity');
+								}
+
+								// Process the stream from Perplexity
+								const reader = perplexityResponse.body.getReader();
+								let buffer = '';
+								let answerContent = ''; // Accumulate answer content for validation step
+								let stepLinks: string[] = [];
+								let stepTokens = 0;
+
+								while (true) {
+									const { done, value } = await reader.read();
+									if (done) break;
+									buffer += new TextDecoder().decode(value, { stream: true });
+									const lines = buffer.split('\n');
+									buffer = lines.pop() || '';
+
+									for (const line of lines) {
+										const trimmedLine = line.trim();
+										if (!trimmedLine || !trimmedLine.startsWith('data: ') || trimmedLine.includes('[DONE]')) continue;
+										try {
+											const data = JSON.parse(trimmedLine.slice(5));
+											if (data.choices?.[0]?.delta?.content) {
+												const chunk = data.choices[0].delta.content;
+												answerContent += chunk;
+												// Forward the chunk to the frontend
+												controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+													type: 'answer_chunk',
+													step: i + 1,
+													phase: phaseIndex,
+													chunk: chunk
+												})}\n\n`));
+											}
+											if (data.citations && Array.isArray(data.citations)) {
+												stepLinks = data.citations;
+											}
+											if (data.usage?.total_tokens) {
+												stepTokens = data.usage.total_tokens;
+											}
+										} catch (e) { console.error('Error parsing Perplexity stream line:', trimmedLine, e); continue; }
+									}
+								}
+
+								// After stream for this step ends, send links and tokens
+								controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+									type: 'answer_details',
+									step: i + 1,
 									phase: phaseIndex,
-									answer: content,
-									links
+									links: stepLinks,
+									tokens: stepTokens
 								})}\n\n`));
+
+								// Store the complete answer and details for the validation phase
+								answers.push(answerContent); 
+								allLinks.push(stepLinks);
+								questionTokens.push(stepTokens);
+								totalTokensUsed += stepTokens;
+
 							} catch (error) {
 								console.error(`Error getting answer for question ${i + 1}:`, error);
 								throw new Error(`Failed to get answer for question: ${question}`);

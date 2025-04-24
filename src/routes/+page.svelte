@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { Plus, ScanSearch, Zap } from 'lucide-svelte';
-	import type { Model, ChatMessage } from '$lib/types';
-	import type { Conversation } from '$lib/stores/conversations';
-	import type { PageData } from './$types';
+	import type { ChatMessage } from '$lib/types';
 	import { conversations } from '$lib/stores/conversations';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import MessageContent from '$lib/components/MessageContent.svelte';
 	import ModelSelector from '$lib/components/ModelSelector.svelte';
@@ -19,8 +17,6 @@
 	import { openaiModel, autoQuestionCount, questionCount } from '$lib/stores/research';
 	import { openaiApiKey, perplexityApiKey } from '$lib/stores/apiKeys';
 	import { perplexityModels } from '$lib/config/models';
-	
-	export let data: PageData;
 
 	let message = $draftMessage;
 	let chatHistory: ChatMessage[] = [];
@@ -71,7 +67,7 @@
 			
 			const responseData = await response.json();
 			const name = responseData.choices[0].message.content.trim();
-			const conversationId = $page.url.searchParams.get('id');
+			const conversationId = page.url.searchParams.get('id');
 			if (conversationId) {
 				conversations.updateConversationName(conversationId, name);
 			}
@@ -96,7 +92,7 @@
 		} else {
 			chatHistory = chatHistory.filter((_, i) => i !== index && i !== index - 1);
 		}
-		const conversationId = $page.url.searchParams.get('id');
+		const conversationId = page.url.searchParams.get('id');
 		if (conversationId) {
 			conversations.updateConversation(conversationId, chatHistory, $model?.id || '', $isDeepResearch);
 		}
@@ -123,7 +119,7 @@
 			chatHistory[editingMessageIndex] = { ...originalMessage, content: editingContent };
 			editingMessageIndex = null;
 			editingContent = '';
-			const conversationId = $page.url.searchParams.get('id');
+			const conversationId = page.url.searchParams.get('id');
 			if (conversationId) {
 				conversations.updateConversation(conversationId, chatHistory, $model?.id || '', $isDeepResearch);
 			}
@@ -144,13 +140,16 @@
 	async function handleSubmit(userMessage?: string) {
 		const messageToSend = userMessage ?? message;
 		if (!messageToSend.trim()) return;
-		if (!$model) { error = 'Please select a model first'; return; }
+		if (!$model) {
+			error = 'Please select a model first';
+			return;
+		}
 
-		let conversationId = $page.url.searchParams.get('id');
+		let conversationId = page.url.searchParams.get('id');
 		if (!conversationId) {
 			conversationId = conversations.createConversation($model.id);
 			await goto(`/?id=${conversationId}`, { replaceState: true });
-			conversationId = $page.url.searchParams.get('id');
+			conversationId = page.url.searchParams.get('id');
 			if (!conversationId) { error = 'Failed to create or switch to new conversation.'; return; }
 		}
 
@@ -225,14 +224,19 @@
 								if (!assistantMessage.researchPhases) assistantMessage.researchPhases = [];
 								if (!assistantMessage.researchPhases[currentPhase]) {
 									assistantMessage.researchPhases[currentPhase] = {
-										steps: Array(data.steps).fill(null).map(() => ({
-											question: '', answer: '', completed: false, links: [], startTime: null, duration: null
-										})),
+										steps: data.questions 
+											? (data.questions as string[]).map((q: string) => ({ 
+												question: q, answer: '', completed: false, links: [], startTime: null, duration: null, tokens: 0
+											}))
+											: Array(data.steps).fill(null).map(() => ({ 
+												question: '', answer: '', completed: false, links: [], startTime: null, duration: null, tokens: 0
+											})),
 										totalSteps: data.steps,
 										title: currentPhase === 0 ? 'Initial Research' : 'Additional Research'
 									};
 								}
 								hasUpdate = true;
+								chatHistory = [...chatHistory];
 							} else if (data.type === 'new_phase') {
 								currentPhase = data.phase || 0;
 								if (!assistantMessage.researchPhases) assistantMessage.researchPhases = [];
@@ -246,17 +250,28 @@
 								currentPhase = data.phase || 0;
 								if (assistantMessage.researchPhases?.[currentPhase]?.steps[data.step - 1]) {
 									const step = assistantMessage.researchPhases[currentPhase].steps[data.step - 1];
-									step.question = data.question;
+									if (!step.question) {
+										step.question = data.question; 
+									}
 									step.startTime = Date.now();
 									hasUpdate = true;
 								}
-							} else if (data.type === 'answer') {
+							} else if (data.type === 'answer_chunk') {
 								currentPhase = data.phase || 0;
 								if (assistantMessage.researchPhases?.[currentPhase]?.steps[data.step - 1]) {
 									const step = assistantMessage.researchPhases[currentPhase].steps[data.step - 1];
-									step.answer = data.answer;
-									step.completed = true;
+									const cleanedChunk = data.chunk.replace(/<think>.*?<\/think>\s*/gs, '').trim();
+									step.answer += cleanedChunk;
+									step.completed = false;
+									hasUpdate = true;
+								}
+							} else if (data.type === 'answer_details') {
+								currentPhase = data.phase || 0;
+								if (assistantMessage.researchPhases?.[currentPhase]?.steps[data.step - 1]) {
+									const step = assistantMessage.researchPhases[currentPhase].steps[data.step - 1];
 									step.links = data.links || [];
+									step.tokens = data.tokens || 0;
+									step.completed = true;
 									step.duration = (Date.now() - (step.startTime || Date.now())) / 1000;
 									hasUpdate = true;
 								}
@@ -349,13 +364,12 @@
 	}
 
 	$: {
-		if ($page.url.searchParams.has('id')) {
-			const currentId = $page.url.searchParams.get('id');
+		if (page.url.searchParams.has('id')) {
+			const currentId = page.url.searchParams.get('id');
 			const loadedConversation = conversations.getConversation(currentId!);
 			if (loadedConversation) {
 				chatHistory = loadedConversation.messages;
 				$isDeepResearch = loadedConversation.isDeepResearch;
-				$model = perplexityModels.find(m => m.id === loadedConversation.model) || perplexityModels[0] || null;
 				conversationTotalTokens = loadedConversation.totalTokens || 0;
 				error = null;
 			} else if (currentId !== 'new') {
@@ -377,7 +391,7 @@
 	}
 	
 	$: {
-		const conversationId = $page.url.searchParams.get('id');
+		const conversationId = page.url.searchParams.get('id');
 		if (conversationId && $model) {
 			const currentConversation = conversations.getConversation(conversationId);
 			if (currentConversation && (currentConversation.model !== $model.id || currentConversation.isDeepResearch !== $isDeepResearch)) {

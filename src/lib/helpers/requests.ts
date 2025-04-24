@@ -132,20 +132,22 @@ export async function callPerplexity({
     model = 'sonar-reasoning-pro',
     messages,
     temperature = 0.5,
-    apiKey
+    apiKey,
+    stream = false
 }: {
     model: string;
     messages: Message[];
     temperature?: number;
     apiKey?: string;
-}): Promise<{ content: string; links: string[]; tokens: number }> {
+    stream?: boolean;
+}): Promise<{ content: string; links: string[]; tokens: number } | Response> {
     try {
         const finalApiKey = apiKey || env.PERPLEXITY_API_KEY;
         if (!finalApiKey) {
             throw new Error('Perplexity API key not configured. Provide it via Settings modal or server environment variable.');
         }
 
-        console.log(`Calling Perplexity API with model: ${model}`);
+        console.log(`Calling Perplexity API with model: ${model}, stream: ${stream}`);
         
         const response = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
@@ -157,7 +159,7 @@ export async function callPerplexity({
                 model,
                 messages,
                 temperature,
-                stream: false
+                stream
             })
         });
 
@@ -170,6 +172,10 @@ export async function callPerplexity({
             } catch (e) {
                 throw new Error(`Perplexity API error (${response.status}): ${errorBody || 'Unknown error'}`);
             }
+        }
+
+        if (stream) {
+            return response;
         }
 
         const data = await response.json() as PerplexityResponse;
