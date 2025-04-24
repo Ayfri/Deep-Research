@@ -53,7 +53,7 @@
 	
 	{#if isOpen}
 		<div 
-			class="absolute left-0 top-full mt-1 w-full bg-gray-800/90 backdrop-blur border border-gray-700/50 rounded-lg shadow-lg overflow-hidden"
+			class="absolute left-0 top-full mt-1 w-full bg-gray-800/90 backdrop-blur border border-gray-700/50 rounded-lg shadow-lg"
 			style="z-index: {zIndex};"
 		>
 			{#each options as option}

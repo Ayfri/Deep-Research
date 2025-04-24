@@ -46,7 +46,7 @@
 	}));
 </script>
 
-<div class="flex flex-col gap-3 p-4 bg-white/5 rounded-lg backdrop-blur-sm z-10">
+<div class="flex flex-col gap-3 p-4 bg-white/5 rounded-lg z-10">
 	<h3 class="text-sm font-medium text-gray-300 flex items-center gap-2">
 		<ScanSearch size={16} />
 		Research Settings

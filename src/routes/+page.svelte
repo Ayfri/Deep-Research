@@ -572,7 +572,7 @@
 				{/if}
 			</div>
 			
-			<div class="relative">
+			<div class="relative z-0">
 				<MessageInput 
 					bind:message={message}
 					isLoading={isLoading}
