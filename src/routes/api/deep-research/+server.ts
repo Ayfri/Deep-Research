@@ -40,11 +40,16 @@ Example response if research is sufficient:
 }`;
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { message, model, openaiModel = 'o3-mini', autoQuestionCount = true, questionCount = 5 } = await request.json();
+	const { message, model, openaiModel = 'o4-mini', autoQuestionCount = true, questionCount = 5 } = await request.json();
 
-	if (!OPENAI_API_KEY || !PERPLEXITY_API_KEY) {
-		throw error(500, 'API keys not configured');
-	}
+	// Read API keys from headers, fallback to environment variables
+	const openaiApiKey = request.headers.get('X-Openai-Api-Key');
+	const perplexityApiKey = request.headers.get('X-Perplexity-Api-Key');
+
+	// No need to check here, helpers will check final key availability
+	// if (!OPENAI_API_KEY || !PERPLEXITY_API_KEY) {
+	// 	throw error(500, 'API keys not configured');
+	// }
 
 	const encoder = new TextEncoder();
 	const stream = new ReadableStream({
@@ -83,7 +88,8 @@ export const POST: RequestHandler = async ({ request }) => {
 								{ role: 'user', content: originalMessage }
 							],
 							temperature: 0.5,
-							reasoningEffort: useReasoningEffort
+							reasoningEffort: useReasoningEffort,
+							apiKey: openaiApiKey || undefined
 						});
 						
 						totalTokensUsed += researchTokens;
@@ -134,7 +140,8 @@ export const POST: RequestHandler = async ({ request }) => {
 							try {
 								const { content, links, tokens } = await callPerplexity({
 									model: model.id,
-									messages: [{ role: 'user', content: question }]
+									messages: [{ role: 'user', content: question }],
+									apiKey: perplexityApiKey || undefined
 								});
 								
 								totalTokensUsed += tokens;
@@ -167,7 +174,8 @@ export const POST: RequestHandler = async ({ request }) => {
 								{ role: 'user', content: `Original query: ${originalMessage}\n\nResearch findings:\n${answers.join('\n\n')}` }
 							],
 							temperature: 0.2,
-							reasoningEffort: highEffortModels.includes(openaiModel) ? 'high' : undefined
+							reasoningEffort: highEffortModels.includes(openaiModel) ? 'high' : undefined,
+							apiKey: openaiApiKey || undefined
 						});
 						
 						totalTokensUsed += validationTokens;
@@ -223,7 +231,8 @@ export const POST: RequestHandler = async ({ request }) => {
 						}
 					],
 					temperature: 0.5,
-					reasoningEffort: highEffortModels.includes(openaiModel) ? 'high' : undefined
+					reasoningEffort: highEffortModels.includes(openaiModel) ? 'high' : undefined,
+					apiKey: openaiApiKey || undefined
 				});
 				
 				totalTokensUsed += summaryTokens;

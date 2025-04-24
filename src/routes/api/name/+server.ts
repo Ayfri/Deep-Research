@@ -4,6 +4,13 @@ import { OPENAI_API_KEY } from '$env/static/private';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const { messages } = await request.json();
+	
+	// Read API key from header or fall back to environment variable
+	const apiKey = request.headers.get('X-Openai-Api-Key') || OPENAI_API_KEY;
+	
+	if (!apiKey) {
+		throw new Error('OpenAI API key not configured. Provide it via X-Openai-Api-Key header or server environment variable.');
+	}
 
 	const firstUserMessage = messages.find((m: any) => m.role === 'user')?.content || '';
 	const namingPrompt = `Generate a short and creative name (maximum 4 words) for a conversation that starts with: "${firstUserMessage}". Respond only with the name, without quotes or punctuation.`;
@@ -12,7 +19,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			'Authorization': `Bearer ${OPENAI_API_KEY}`
+			'Authorization': `Bearer ${apiKey}`
 		},
 		body: JSON.stringify({
 			model: 'gpt-4o-mini',

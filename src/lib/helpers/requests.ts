@@ -35,16 +35,19 @@ export async function callOpenAI({
     model = 'gpt-4o',
     messages,
     temperature = 0.5,
-    reasoningEffort
+    reasoningEffort,
+    apiKey
 }: {
     model: string;
     messages: Message[];
     temperature?: number;
     reasoningEffort?: 'low' | 'medium' | 'high';
+    apiKey?: string;
 }): Promise<{ content: string; tokens: number }> {
     try {
-        if (!OPENAI_API_KEY) {
-            throw new Error('OpenAI API key not configured');
+        const finalApiKey = apiKey || OPENAI_API_KEY;
+        if (!finalApiKey) {
+            throw new Error('OpenAI API key not configured. Provide it via function call or server environment variable.');
         }
 
         const body: Record<string, any> = {
@@ -57,8 +60,10 @@ export async function callOpenAI({
             body.temperature = temperature;
         }
 
+        const effortModels = ["o3-mini", "o4-mini", "o3"];
+
         // Add reasoning_effort for o3 models if specified
-        if (reasoningEffort && model.startsWith('o3')) {
+        if (reasoningEffort && effortModels.includes(model)) {
             body.reasoning_effort = reasoningEffort;
         }
 
@@ -68,7 +73,7 @@ export async function callOpenAI({
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${OPENAI_API_KEY}`
+                'Authorization': `Bearer ${finalApiKey}`
             },
             body: JSON.stringify(body)
         });
@@ -126,15 +131,18 @@ export function safeJsonParse<T>(jsonString: string, defaultValue?: T): T {
 export async function callPerplexity({
     model = 'sonar-reasoning-pro',
     messages,
-    temperature = 0.5
+    temperature = 0.5,
+    apiKey
 }: {
     model: string;
     messages: Message[];
     temperature?: number;
+    apiKey?: string;
 }): Promise<{ content: string; links: string[]; tokens: number }> {
     try {
-        if (!PERPLEXITY_API_KEY) {
-            throw new Error('Perplexity API key not configured');
+        const finalApiKey = apiKey || PERPLEXITY_API_KEY;
+        if (!finalApiKey) {
+            throw new Error('Perplexity API key not configured. Provide it via function call or server environment variable.');
         }
 
         console.log(`Calling Perplexity API with model: ${model}`);
@@ -142,7 +150,7 @@ export async function callPerplexity({
         const response = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+                'Authorization': `Bearer ${finalApiKey}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({

@@ -4,16 +4,19 @@ import { PERPLEXITY_API_KEY } from '$env/static/private';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const { message, model } = await request.json();
+	
+	// Read API key from header or fall back to environment variable
+	const apiKey = request.headers.get('X-Perplexity-Api-Key') || PERPLEXITY_API_KEY;
 
-	if (!PERPLEXITY_API_KEY) {
-		throw error(500, 'API key not configured');
+	if (!apiKey) {
+		throw error(500, 'API key not configured. Provide it via X-Perplexity-Api-Key header or server environment variable.');
 	}
 
 	// Pour le streaming, on utilisera un post-traitement
 	const streamResponse = await fetch('https://api.perplexity.ai/chat/completions', {
 		method: 'POST',
 		headers: {
-			'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+			'Authorization': `Bearer ${apiKey}`,
 			'Content-Type': 'application/json',
 		},
 		body: JSON.stringify({
