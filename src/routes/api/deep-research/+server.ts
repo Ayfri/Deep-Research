@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { OPENAI_API_KEY, PERPLEXITY_API_KEY } from '$env/static/private';
 import { callOpenAI, callPerplexity, safeJsonParse } from '$lib/helpers/requests';
 
+const highEffortModels = ["o3-mini", "o4-mini", "o3"];
+
 const getResearchPrompt = (questionCount: number | null) => {
 	if (questionCount) {
 		return `You are a research assistant. Your task is to break down the user's query into specific research questions that will help provide a comprehensive answer.
@@ -72,7 +74,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						const researchPrompt = getResearchPrompt(autoQuestionCount ? null : questionCount);
 						
 						// Determine if reasoning_effort should be used
-						const useReasoningEffort = openaiModel === 'o3-mini' ? 'high' : undefined;
+						const useReasoningEffort = highEffortModels.includes(openaiModel) ? 'high' : undefined;
 						
 						const { content: researchContent, tokens: researchTokens } = await callOpenAI({
 							model: openaiModel,
@@ -165,7 +167,7 @@ export const POST: RequestHandler = async ({ request }) => {
 								{ role: 'user', content: `Original query: ${originalMessage}\n\nResearch findings:\n${answers.join('\n\n')}` }
 							],
 							temperature: 0.2,
-							reasoningEffort: openaiModel === 'o3-mini' ? 'high' : undefined
+							reasoningEffort: highEffortModels.includes(openaiModel) ? 'high' : undefined
 						});
 						
 						totalTokensUsed += validationTokens;
@@ -221,7 +223,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						}
 					],
 					temperature: 0.5,
-					reasoningEffort: openaiModel === 'o3-mini' ? 'high' : undefined
+					reasoningEffort: highEffortModels.includes(openaiModel) ? 'high' : undefined
 				});
 				
 				totalTokensUsed += summaryTokens;
