@@ -109,6 +109,20 @@
 			return step.answer;
 		}
 	});
+
+	// Force reactivity when phases prop changes
+	$: forceReactivity = phases;
+	
+	// Log phases for debugging
+	$: {
+		console.log(`ResearchSteps received ${phases.length} phases:`, 
+			phases.map(phase => ({
+				title: phase.title,
+				totalSteps: phase.totalSteps,
+				steps: phase.steps.map(s => ({ question: s.question, completed: s.completed }))
+			}))
+		);
+	}
 </script>
 
 <div class="space-y-4">

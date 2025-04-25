@@ -209,17 +209,36 @@
 				const { done, value } = await reader.read();
 				if (done) break;
 				buffer += new TextDecoder().decode(value, { stream: true });
-				const lines = buffer.split('\\n');
-				buffer = lines.pop() || '';
+				
+				const events = buffer.split('\n\n');
+				buffer = events.pop() || '';
 
 				let hasUpdate = false;
-				for (const line of lines) {
-					const trimmedLine = line.trim();
-					if (!trimmedLine || !trimmedLine.startsWith('data: ') || trimmedLine.includes('[DONE]')) continue;
+				for (const event of events) {
+					const trimmedEvent = event.trim();
+					if (!trimmedEvent || !trimmedEvent.startsWith('data: ') || trimmedEvent.includes('[DONE]')) continue;
+					
 					try {
-						const data = JSON.parse(trimmedLine.slice(5));
+						const dataStart = trimmedEvent.indexOf('data: ');
+						if (dataStart === -1) continue;
+						
+						let jsonStr = trimmedEvent.slice(dataStart + 6).trim();
+						
+						const lastBrace = jsonStr.lastIndexOf('}');
+						if (lastBrace !== -1 && lastBrace < jsonStr.length - 1) {
+							jsonStr = jsonStr.substring(0, lastBrace + 1);
+						}
+						
+						if (!jsonStr.startsWith('{') || !jsonStr.endsWith('}')) {
+							console.warn('Malformed JSON data:', jsonStr);
+							continue;
+						}
+						
+						const data = JSON.parse(jsonStr);
+						
 						if ($isDeepResearch) {
 							if (data.type === 'steps') {
+								console.log("Received steps event:", data);
 								currentPhase = data.phase || 0;
 								if (!assistantMessage.researchPhases) assistantMessage.researchPhases = [];
 								if (!assistantMessage.researchPhases[currentPhase]) {
@@ -234,6 +253,11 @@
 										totalSteps: data.steps,
 										title: currentPhase === 0 ? 'Initial Research' : 'Additional Research'
 									};
+									console.log('Created research phase:', JSON.stringify(assistantMessage.researchPhases[currentPhase]));
+									
+									// Logging the entire researchPhases array
+									console.log(`Full researchPhases (length: ${assistantMessage.researchPhases.length}):`, 
+										JSON.stringify(assistantMessage.researchPhases));
 								}
 								hasUpdate = true;
 								chatHistory = [...chatHistory];
@@ -310,7 +334,7 @@
 								hasUpdate = true;
 							}
 						}
-					} catch (e) { console.error('Error parsing stream data line:', trimmedLine, e); continue; }
+					} catch (e) { console.error('Error parsing stream data line:', trimmedEvent, e); continue; }
 				}
 				if (hasUpdate) {
 					const historyWithoutAssistant = chatHistory.slice(0, -1);
